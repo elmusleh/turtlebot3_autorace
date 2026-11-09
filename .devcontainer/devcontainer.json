@@ -1,0 +1,45 @@
+{
+  "name": "TurtleBot3 AutoRace 2020 (ROS 2 Humble)",
+  "build": {
+    "dockerfile": "../Dockerfile.humble",
+    "context": ".."
+  },
+  "workspaceFolder": "/root/ros2_humble_ws/src/turtlebot3_autorace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/root/ros2_humble_ws/src/turtlebot3_autorace,type=bind",
+  "mounts": [
+    "source=${localWorkspaceFolder}/../ros2_humble_ws,target=/root/ros2_humble_ws,type=bind",
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
+  ],
+  "containerEnv": {
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "ROS_DOMAIN_ID": "70",
+    "TURTLEBOT3_MODEL": "burger_cam"
+  },
+  "runArgs": [
+    "--net=host",
+    "--ipc=host",
+    "--privileged"
+  ],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "python.analysis.extraPaths": [
+          "/opt/ros/humble/lib/python3.10/site-packages",
+          "/root/ros2_humble_ws/install/turtlebot3_autorace_mission/lib/python3.10/site-packages",
+          "/root/ros2_humble_ws/install/turtlebot3_autorace_detect/lib/python3.10/site-packages",
+          "/root/ros2_humble_ws/install/turtlebot3_autorace_camera/lib/python3.10/site-packages"
+        ],
+        "files.associations": {
+          "*.launch.py": "python"
+        }
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-iot.vscode-ros"
+      ]
+    }
+  },
+  "postStartCommand": "bash -c 'source /opt/ros/humble/setup.bash && [ -f /root/ros2_humble_ws/install/setup.bash ] && source /root/ros2_humble_ws/install/setup.bash || true'"
+}

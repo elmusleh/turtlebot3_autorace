@@ -36,6 +36,7 @@ from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float64, String, UInt8
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 SIGN_NAMES = {
@@ -143,6 +144,7 @@ class MissionSupervisor(Node):
         self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.max_vel_pub = self.create_publisher(Float64, '/control/max_vel', 10)
         self.state_pub = self.create_publisher(String, '/mission/state', 10)
+        self.marker_pub = self.create_publisher(MarkerArray, '/mission/obstacle_markers', 10)
 
         rate = max(5.0, float(g('publish_rate').value))
         self.create_timer(1.0 / rate, self.tick)
@@ -232,6 +234,49 @@ class MissionSupervisor(Node):
             self.last_state_str = state_str
             self.get_logger().info(f'Mission state -> {state_str} at ({self.pos_x:.2f}, {self.pos_y:.2f})')
 
+    def publish_obstacle_markers(self, hit_points):
+        if not hit_points:
+            return
+        # Average into representative centroid clusters
+        clusters = []
+        for x, y in hit_points:
+            matched = False
+            for c in clusters:
+                if math.hypot(c['x'] - x, c['y'] - y) < 0.15:
+                    c['pts'].append((x, y))
+                    c['x'] = sum(p[0] for p in c['pts']) / len(c['pts'])
+                    c['y'] = sum(p[1] for p in c['pts']) / len(c['pts'])
+                    matched = True
+                    break
+            if not matched:
+                clusters.append({'x': x, 'y': y, 'pts': [(x, y)]})
+
+        markers = MarkerArray()
+        stamp = self.get_clock().now().to_msg()
+        for idx, c in enumerate(clusters[:10]):
+            m = Marker()
+            m.header.frame_id = 'odom'
+            m.header.stamp = stamp
+            m.ns = 'obstacles'
+            m.id = idx
+            m.type = Marker.CYLINDER
+            m.action = Marker.ADD
+            m.pose.position.x = float(c['x'])
+            m.pose.position.y = float(c['y'])
+            m.pose.position.z = 0.12
+            m.pose.orientation.w = 1.0
+            m.scale.x = 0.18
+            m.scale.y = 0.18
+            m.scale.z = 0.25
+            m.color.a = 0.85
+            m.color.r = 1.0
+            m.color.g = 0.2
+            m.color.b = 0.0
+            markers.markers.append(m)
+
+        if markers.markers:
+            self.marker_pub.publish(markers)
+
     def on_cmd(self, msg):
         self.last_cmd = msg
         self.last_cmd_time = self.now()
@@ -305,6 +350,10 @@ class MissionSupervisor(Node):
         self.left_range = min(left_ranges) if left_ranges else 9e9
         self.right_range = min(right_ranges) if right_ranges else 9e9
         self.rear_range = min(rear_ranges) if rear_ranges else 9e9
+
+        # Publish 3D RViz obstacle markers for detected clusters
+        if construction_hits:
+            self.publish_obstacle_markers(construction_hits)
 
         # Dynamically adapt construction slalom waypoint x ONLY if LiDAR detects a barrier
         # directly inside the planned sub-lane ahead, and latch once per waypoint so it never oscillates.

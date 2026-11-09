@@ -24,6 +24,7 @@ Main Simulation Commands:
   verify          Run automated course verification / regression monitor (optional: --headless)
   status          Show nodes/topics currently active
   stop            Stop and clean up all running simulation processes & containers
+  clean-docker    Prune dangling Docker images and builder cache
 
 Humble Docker Subcommands:
   humble build    Rebuild the workspace inside the Humble container
@@ -141,6 +142,13 @@ cmd_stop() {
   echo "Stopped."
 }
 
+cmd_clean_docker() {
+  echo "== Pruning dangling Docker images and build cache =="
+  docker image prune -f
+  docker builder prune -f 2>/dev/null || true
+  echo "Docker clean complete."
+}
+
 cmd_build() {
   cmd_humble build
 }
@@ -152,6 +160,7 @@ case "${1:-help}" in
   humble) shift; cmd_humble "$@" ;;
   build) shift; cmd_build "$@" ;;
   status) cmd_status ;;
+  clean-docker) cmd_clean_docker ;;
   stop) cmd_stop ;;
   help|--help|-h) usage ;;
   *) echo "Unknown command: $1"; usage; exit 1 ;;
