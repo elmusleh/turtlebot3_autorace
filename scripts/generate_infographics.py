@@ -83,56 +83,68 @@ print("Saved /home/steve/dev/ros2_exmaple/turtlebot3_autorace/docs/media/archite
 
 
 # ==============================================================================
-# FIGURE 2: Multi-Stage Task Progression Timeline & Track Infographic
+# FIGURE 2: Multi-Stage Task Progression Timeline & Track Infographic (White Background)
 # ==============================================================================
+plt.style.use('default')
 fig, ax = plt.subplots(figsize=(16, 9), dpi=200)
-ax.set_facecolor('#0f1218')
-fig.patch.set_facecolor('#0a0c10')
+ax.set_facecolor('#FFFFFF')
+fig.patch.set_facecolor('#FFFFFF')
 
-ax.text(0.5, 0.95, "AutoRace 2020: 7-Stage Autonomous Mission Sequence", 
-        fontsize=20, weight='bold', color='#ffffff', ha='center')
-ax.text(0.5, 0.90, "Ground-Truth Trigger Conditions, Sensing Modalities & Control Responses", 
-        fontsize=12, color='#00d4ff', ha='center')
+# Header Banner
+header_bg = patches.FancyBboxPatch((0.04, 0.87), 0.92, 0.10,
+                                   boxstyle="round,pad=0.01,rounding_size=0.02",
+                                   facecolor='#F8FAFC', edgecolor='#CBD5E1', lw=1.5)
+ax.add_patch(header_bg)
+ax.text(0.5, 0.935, "AutoRace 2020: 7-Stage Autonomous Mission Sequence", 
+        fontsize=21, weight='bold', color='#0F172A', ha='center', va='center')
+ax.text(0.5, 0.892, "Ground-Truth Trigger Conditions, Sensing Modalities & Control Responses", 
+        fontsize=12.5, weight='bold', color='#0284C7', ha='center', va='center')
 
 stages = [
-    ("TASK 1\nTraffic Light", "Pose: (0.80, -1.75)\nHue: [40, 100]\nLaunch on Green", "#22c55e", 0.08),
-    ("TASK 2\nLane Tracking", "Bird's-Eye IPM\nx = Ay² + By + C\nPD Steering Law", "#06b6d4", 0.22),
-    ("TASK 3\nTraffic Signs", "SIFT + RANSAC\nClean Yellow Box\n3.0s Stop Pause", "#eab308", 0.36),
-    ("TASK 4\nBarrier Slalom", "360° LiDAR Cluster\nCorridor Shift:\nx=1.77m <-> 1.47m", "#f97316", 0.50),
-    ("TASK 5\nBay Parking", "Turn South Aisle\n90° Reverse Pivot\nHold at (0.28, 0.75)", "#a855f7", 0.64),
-    ("TASK 6\nLevel Crossing", "Stop Bar at (-0.80)\nLiDAR range < 0.45m\nWait until raised", "#ef4444", 0.78),
-    ("TASK 7\nDark Tunnel", "Pillar Avoidance\nWall Balancing\nLoop Completion", "#3b82f6", 0.92)
+    ("TASK 1\nTraffic Light", "Pose: (0.80, -1.75)\nHue: [40, 100]\nLaunch on Green", "#16A34A", "#F0FDF4", 0.085),
+    ("TASK 2\nLane Tracking", "Bird's-Eye IPM\nx = Ay² + By + C\nPD Steering Law", "#0891B2", "#ECFEFF", 0.223),
+    ("TASK 3\nTraffic Signs", "SIFT + RANSAC\nClean Yellow Box\n3.0s Stop Pause", "#D97706", "#FFFBEB", 0.361),
+    ("TASK 4\nBarrier Slalom", "360° LiDAR Cluster\nCorridor Shift:\nx=1.77m <-> 1.47m", "#EA580C", "#FFF7ED", 0.500),
+    ("TASK 5\nBay Parking", "Turn South Aisle\n90° Reverse Pivot\nHold at (0.28, 0.75)", "#9333EA", "#FAF5FF", 0.638),
+    ("TASK 6\nLevel Crossing", "Stop Bar at (-0.80)\nLiDAR range < 0.45m\nWait until raised", "#DC2626", "#FEF2F2", 0.776),
+    ("TASK 7\nDark Tunnel", "Pillar Avoidance\nWall Balancing\nLoop Completion", "#2563EB", "#EFF6FF", 0.915)
 ]
 
 # Connecting timeline arrow
-ax.annotate("", xy=(0.95, 0.55), xytext=(0.05, 0.55),
-            arrowprops=dict(arrowstyle="->,head_width=0.6,head_length=1.0", lw=4, color='#334155'))
+ax.annotate("", xy=(0.96, 0.54), xytext=(0.04, 0.54),
+            arrowprops=dict(arrowstyle="->,head_width=0.6,head_length=1.0", lw=4.5, color='#94A3B8'),
+            zorder=2)
 
-for title, desc, col, x_pos in stages:
-    # Circle marker
-    ax.scatter(x_pos, 0.55, color=col, s=700, edgecolors='white', lw=2.5, zorder=5)
+for idx, (title, desc, col, tint_bg, x_pos) in enumerate(stages, 1):
+    # Vertical connector stem
+    ax.plot([x_pos, x_pos], [0.43, 0.65], color=col, lw=2.2, linestyle=':', zorder=3)
+
+    # Numbered Circle marker on timeline
+    ax.scatter(x_pos, 0.54, color=col, s=850, edgecolors='#FFFFFF', lw=3, zorder=5)
+    ax.text(x_pos, 0.54, str(idx), fontsize=13, weight='bold', color='#FFFFFF', ha='center', va='center', zorder=6)
     
     # Upper Title Card
-    ax.text(x_pos, 0.66, title, fontsize=11, weight='bold', color=col, ha='center', va='bottom',
-            bbox=dict(boxstyle="round,pad=0.4", fc="#1e293b", ec=col, lw=1.5))
+    ax.text(x_pos, 0.66, title, fontsize=11.5, weight='bold', color=col, ha='center', va='bottom',
+            bbox=dict(boxstyle="round,pad=0.45", fc=tint_bg, ec=col, lw=2.0), zorder=4)
     
     # Lower Detail Card
-    ax.text(x_pos, 0.44, desc, fontsize=9.5, color='#f1f5f9', ha='center', va='top',
-            bbox=dict(boxstyle="round,pad=0.5", fc="#161b22", ec="#30363d", lw=1.2))
+    ax.text(x_pos, 0.42, desc, fontsize=9.8, color='#1E293B', ha='center', va='top',
+            bbox=dict(boxstyle="round,pad=0.55", fc="#F8FAFC", ec="#CBD5E1", lw=1.5), zorder=4)
 
 # Bottom Summary Banner
-banner = patches.FancyBboxPatch((0.08, 0.06), 0.84, 0.16, boxstyle="round,pad=0.02,rounding_size=0.03",
-                               facecolor='#1e293b', edgecolor='#00d4ff', lw=1.5)
+banner = patches.FancyBboxPatch((0.06, 0.05), 0.88, 0.16, boxstyle="round,pad=0.02,rounding_size=0.03",
+                               facecolor='#F0F9FF', edgecolor='#0284C7', lw=2.0)
 ax.add_patch(banner)
-ax.text(0.5, 0.16, "Single Unified State Machine: mission_supervisor.py", fontsize=13, weight='bold', color='#00d4ff', ha='center')
-ax.text(0.5, 0.10, "Guarantees zero command collisions on /cmd_vel while seamlessly blending vision PD lane centering with waypoint Pure-Pursuit.",
-        fontsize=10.5, color='#94a3b8', ha='center')
+ax.text(0.5, 0.155, "Single Unified State Machine: mission_supervisor.py (15 Hz Control Loop)",
+        fontsize=13.5, weight='bold', color='#0369A1', ha='center', va='center')
+ax.text(0.5, 0.095, "Guarantees zero command collisions on /cmd_vel while seamlessly blending vision PD lane centering with waypoint Pure-Pursuit.",
+        fontsize=11, color='#334155', ha='center', va='center')
 
 ax.set_xlim(0, 1)
 ax.set_ylim(0, 1)
 ax.axis('off')
 
 plt.tight_layout()
-plt.savefig('/home/steve/dev/ros2_exmaple/turtlebot3_autorace/docs/media/mission_progression_infographic.png', dpi=200)
+plt.savefig('/home/steve/dev/ros2_exmaple/turtlebot3_autorace/docs/media/mission_progression_infographic.png', dpi=200, facecolor='#FFFFFF')
 plt.close()
 print("Saved /home/steve/dev/ros2_exmaple/turtlebot3_autorace/docs/media/mission_progression_infographic.png")
