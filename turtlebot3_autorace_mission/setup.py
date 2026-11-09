@@ -38,6 +38,7 @@ setup(
         'console_scripts': [
             'avoid_construction = turtlebot3_autorace_mission.avoid_construction:main',
             'control_lane = turtlebot3_autorace_mission.control_lane:main',
+            'mission_supervisor = turtlebot3_autorace_mission.mission_supervisor:main',
             'mission_tunnel = turtlebot3_autorace_mission.mission_tunnel:main',
         ],
     },

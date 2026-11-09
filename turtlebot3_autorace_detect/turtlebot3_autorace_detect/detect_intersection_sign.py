@@ -18,6 +18,7 @@
 
 from enum import Enum
 import os
+import time
 
 import cv2
 from cv_bridge import CvBridge
@@ -67,14 +68,16 @@ class DetectSign(Node):
             'intersection left right construction parking stop tunnel'
         )
         self.counter = 1
+        self.last_match_img = None
+        self.last_match_until = 0.0
 
         self.templates = {}
         self.fnPreproc()
 
-        self.get_logger().info('DetectSign Node Initialized (all course signs active)')
+        self.get_logger().info('DetectSign Node Initialized (all 7 course signs active)')
 
     def fnPreproc(self):
-        self.sift = cv2.SIFT_create()
+        self.sift = cv2.SIFT_create(nfeatures=500, contrastThreshold=0.02, edgeThreshold=15)
 
         try:
             from ament_index_python.packages import get_package_share_directory
@@ -87,13 +90,13 @@ class DetectSign(Node):
             )
 
         sign_files = [
-            ('intersection', 'intersection.png', self.TrafficSign.intersection.value, 8, 6),
-            ('left', 'left.png', self.TrafficSign.left.value, 8, 6),
+            ('intersection', 'intersection.png', self.TrafficSign.intersection.value, 7, 6),
+            ('left', 'left.png', self.TrafficSign.left.value, 8, 7),
             ('right', 'right.png', self.TrafficSign.right.value, 8, 6),
-            ('construction', 'construction.png', self.TrafficSign.construction.value, 8, 6),
-            ('parking', 'parking.png', self.TrafficSign.parking.value, 6, 5),
-            ('stop', 'stop.png', self.TrafficSign.stop.value, 8, 6),
-            ('tunnel', 'tunnel.png', self.TrafficSign.tunnel.value, 8, 6),
+            ('construction', 'construction.png', self.TrafficSign.construction.value, 6, 5),
+            ('parking', 'parking.png', self.TrafficSign.parking.value, 5, 4),
+            ('stop', 'stop.png', self.TrafficSign.stop.value, 6, 5),
+            ('tunnel', 'tunnel.png', self.TrafficSign.tunnel.value, 6, 5),
         ]
 
         for name, filename, code, min_good, min_inliers in sign_files:
@@ -135,7 +138,7 @@ class DetectSign(Node):
         for pair in matches:
             if len(pair) == 2:
                 m, n = pair
-                if m.distance < 0.68 * n.distance:
+                if m.distance < 0.72 * n.distance:
                     good.append(m)
 
         if len(good) < tmpl['min_good']:
@@ -144,8 +147,7 @@ class DetectSign(Node):
         src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp_t[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
 
-        # Find homography from template (dst_pts) to camera image (src_pts)
-        M, mask = cv2.findHomography(dst_pts, src_pts, cv2.RANSAC, 4.0)
+        M, mask = cv2.findHomography(dst_pts, src_pts, cv2.RANSAC, 4.5)
         if M is None or mask is None:
             return None
 
@@ -153,10 +155,9 @@ class DetectSign(Node):
         inliers = int(np.sum(mask_list))
         if inliers < tmpl['min_inliers']:
             return None
-        if inliers / float(len(good)) < 0.50:
+        if inliers / float(len(good)) < 0.45:
             return None
 
-        # Project template corners into the camera frame and verify geometry
         th, tw = img_t.shape[:2]
         corners = np.float32([[0, 0], [0, th - 1], [tw - 1, th - 1], [tw - 1, 0]]).reshape(-1, 1, 2)
         try:
@@ -170,17 +171,17 @@ class DetectSign(Node):
 
         area = float(cv2.contourArea(poly))
         fh, fw = frame_shape[:2]
-        if not (450.0 <= area <= (fh * fw * 0.45)):
+        if not (300.0 <= area <= (fh * fw * 0.48)):
             return None
 
         x, y, bw, bh = cv2.boundingRect(poly)
-        if bw <= 10 or bh <= 10:
+        if bw <= 8 or bh <= 8:
             return None
         aspect = float(bw) / float(bh)
-        if not (0.35 <= aspect <= 2.6):
+        if not (0.30 <= aspect <= 2.8):
             return None
         extent = area / float(bw * bh)
-        if extent < 0.42:
+        if extent < 0.38:
             return None
 
         return {
@@ -188,10 +189,11 @@ class DetectSign(Node):
             'mask': mask_list,
             'inliers': inliers,
             'poly': poly,
+            'bbox': (x, y, bw, bh),
         }
 
     def cbFindTrafficSign(self, image_msg):
-        if self.counter % 3 != 0:
+        if self.counter % 2 != 0:
             self.counter += 1
             return
         self.counter = 1
@@ -218,33 +220,35 @@ class DetectSign(Node):
                 best_name = name
                 best_res = res
 
+        now = time.time()
         out_img = cv_image_input
+
         if best_name is not None and best_res is not None:
             tmpl = self.templates[best_name]
             msg_sign = UInt8()
             msg_sign.data = int(tmpl['code'])
             self.pub_traffic_sign.publish(msg_sign)
             self.get_logger().info(
-                f'Detect {best_name} sign (code={tmpl["code"]}, inliers={best_res["inliers"]})'
+                f'Detect {best_name.upper()} sign (code={tmpl["code"]}, inliers={best_res["inliers"]})'
             )
 
             vis = cv_image_input.copy()
-            cv2.polylines(vis, [best_res['poly']], True, (0, 255, 0), 3, cv2.LINE_AA)
-            draw_params = {
-                'matchColor': (255, 0, 0),
-                'singlePointColor': None,
-                'matchesMask': best_res['mask'],
-                'flags': 2
-            }
-            out_img = cv2.drawMatches(
-                vis,
-                kp1,
-                tmpl['img'],
-                tmpl['kp'],
-                best_res['good'],
-                None,
-                **draw_params
+            bx, by, bw, bh = best_res['bbox']
+            yellow = (0, 255, 255)
+            cv2.rectangle(vis, (bx, by), (bx + bw, by + bh), yellow, 3, cv2.LINE_AA)
+            label = f'{best_name.upper()}'
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+            ty = max(th + 8, by - 6)
+            cv2.rectangle(vis, (bx, ty - th - 6), (bx + tw + 10, ty + 4), (0, 0, 0), -1)
+            cv2.putText(
+                vis, label, (bx + 5, ty - 2),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, yellow, 2, cv2.LINE_AA
             )
+            out_img = vis
+            self.last_match_img = out_img
+            self.last_match_until = now + 2.8
+        elif self.last_match_img is not None and now < self.last_match_until:
+            out_img = self.last_match_img
 
         self.pub_image_traffic_sign.publish(
             self.cvBridge.cv2_to_compressed_imgmsg(out_img, 'jpg')

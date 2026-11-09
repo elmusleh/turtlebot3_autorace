@@ -1,0 +1,124 @@
+# TurtleBot3 AutoRace 2020 Course Configuration
+# Waypoints format:
+#   x, y: World coordinates on the 0.25m course centerline grid (m)
+#   stage: Mission state label published on /mission/state
+#   radius: Capture radius (m)
+#   speed: Target linear velocity (m/s)
+#   precision: If true, aligns yaw in place before driving forward
+#   pause_sec: Seconds to hold still at this waypoint to read/display sign detection
+#   pause_yaw: Optional target yaw (rad) to face the traffic sign squarely during pause
+
+sign_stop_seconds: 3.0
+
+# Simulation 1 (Default): Traffic Light -> Intersection -> Construction Slalom -> Autonomous Parking
+parking_waypoints:
+  - {x: 1.15, y: -1.75, stage: "drive:start", radius: 0.09, speed: 0.13, precision: false}
+  - {x: 1.52, y: -1.73, stage: "drive:lane", radius: 0.09, speed: 0.12, precision: false}
+  - {x: 1.73, y: -1.55, stage: "sign:approach:intersection", radius: 0.07, speed: 0.06, precision: false}
+  - {x: 1.75, y: -1.36, stage: "sign:approach:intersection", radius: 0.05, speed: 0.05, precision: true, pause_sec: 3.0, pause_yaw: 1.42}
+  - {x: 1.75, y: -1.15, stage: "drive:intersection-approach", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 1.75, y: -0.92, stage: "drive:intersection-approach", radius: 0.08, speed: 0.10, precision: false}
+  - {x: 1.60, y: -0.76, stage: "sign:approach:right", radius: 0.08, speed: 0.08, precision: false}
+  - {x: 1.48, y: -0.75, stage: "sign:approach:right", radius: 0.06, speed: 0.06, precision: true, pause_sec: 3.0, pause_yaw: 3.12}
+  - {x: 1.26, y: -0.58, stage: "drive:roundabout-right", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 1.24, y: -0.40, stage: "drive:roundabout-right", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 1.12, y: -0.27, stage: "drive:roundabout-top", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 1.00, y: -0.25, stage: "drive:roundabout-top", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.88, y: -0.27, stage: "drive:roundabout-top", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.76, y: -0.40, stage: "drive:roundabout-exit", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.74, y: -0.58, stage: "drive:roundabout-exit", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.62, y: -0.73, stage: "drive:roundabout-exit", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.42, y: -0.73, stage: "drive:roundabout-exit", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.27, y: -0.58, stage: "drive:lane-north", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 0.25, y: -0.30, stage: "drive:lane-north", radius: 0.09, speed: 0.13, precision: false}
+  - {x: 0.25, y: 0.05, stage: "drive:lane-north", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 0.38, y: 0.23, stage: "sign:approach:construction", radius: 0.08, speed: 0.08, precision: false}
+  - {x: 0.69, y: 0.24, stage: "sign:approach:construction", radius: 0.05, speed: 0.06, precision: true, pause_sec: 3.0, pause_yaw: -0.06}
+  - {x: 0.95, y: 0.25, stage: "drive:to-construction", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 1.30, y: 0.25, stage: "drive:to-construction", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 1.58, y: 0.27, stage: "avoid:enter", radius: 0.05, speed: 0.08, precision: true}
+  - {x: 1.77, y: 0.36, stage: "avoid:barrier_1", radius: 0.045, speed: 0.075, precision: true}
+  - {x: 1.77, y: 0.67, stage: "avoid:barrier_1", radius: 0.045, speed: 0.075, precision: true}
+  - {x: 1.47, y: 0.84, stage: "avoid:barrier_2", radius: 0.045, speed: 0.075, precision: true}
+  - {x: 1.47, y: 1.15, stage: "avoid:barrier_2", radius: 0.045, speed: 0.075, precision: true}
+  - {x: 1.77, y: 1.32, stage: "avoid:barrier_3", radius: 0.045, speed: 0.075, precision: true}
+  - {x: 1.77, y: 1.60, stage: "avoid:barrier_3", radius: 0.05, speed: 0.085, precision: true}
+  - {x: 1.60, y: 1.74, stage: "drive:to-parking", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 1.32, y: 1.75, stage: "sign:approach:parking", radius: 0.07, speed: 0.06, precision: false}
+  - {x: 1.18, y: 1.75, stage: "sign:approach:parking", radius: 0.05, speed: 0.05, precision: true, pause_sec: 3.0, pause_yaw: 2.92}
+  - {x: 0.78, y: 1.75, stage: "drive:parking-approach", radius: 0.07, speed: 0.09, precision: false}
+  - {x: 0.54, y: 1.68, stage: "parking:turn-in", radius: 0.05, speed: 0.08, precision: true}
+  - {x: 0.50, y: 1.42, stage: "parking:corridor", radius: 0.06, speed: 0.09, precision: true}
+  - {x: 0.50, y: 1.05, stage: "parking:corridor", radius: 0.06, speed: 0.09, precision: true}
+  - {x: 0.50, y: 0.75, stage: "parking:select-bay", radius: 0.04, speed: 0.07, precision: true}
+  - {x: 0.25, y: 0.75, stage: "parking:bay", radius: 0.035, speed: 0.06, precision: true}
+
+# Simulation 2 (Full Loop): Continues past Parking through Chicane, Stop Sign, Level Crossing, S-Curve, Tunnel Sign, and Dark Tunnel back to Start
+full_loop_waypoints:
+  - {x: 1.15, y: -1.75, stage: "drive:start", radius: 0.09, speed: 0.13, precision: false}
+  - {x: 1.52, y: -1.73, stage: "drive:lane", radius: 0.09, speed: 0.12, precision: false}
+  - {x: 1.73, y: -1.55, stage: "sign:approach:intersection", radius: 0.07, speed: 0.06, precision: false}
+  - {x: 1.75, y: -1.36, stage: "sign:approach:intersection", radius: 0.05, speed: 0.05, precision: true, pause_sec: 3.0, pause_yaw: 1.42}
+  - {x: 1.75, y: -1.15, stage: "drive:intersection-approach", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 1.75, y: -0.92, stage: "drive:intersection-approach", radius: 0.08, speed: 0.10, precision: false}
+  - {x: 1.60, y: -0.76, stage: "sign:approach:right", radius: 0.08, speed: 0.08, precision: false}
+  - {x: 1.48, y: -0.75, stage: "sign:approach:right", radius: 0.06, speed: 0.06, precision: true, pause_sec: 3.0, pause_yaw: 3.12}
+  - {x: 1.26, y: -0.58, stage: "drive:roundabout-right", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 1.24, y: -0.40, stage: "drive:roundabout-right", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 1.12, y: -0.27, stage: "drive:roundabout-top", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 1.00, y: -0.25, stage: "drive:roundabout-top", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.88, y: -0.27, stage: "drive:roundabout-top", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.76, y: -0.40, stage: "drive:roundabout-exit", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.74, y: -0.58, stage: "drive:roundabout-exit", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.62, y: -0.73, stage: "drive:roundabout-exit", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.42, y: -0.73, stage: "drive:roundabout-exit", radius: 0.07, speed: 0.10, precision: true}
+  - {x: 0.27, y: -0.58, stage: "drive:lane-north", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 0.25, y: -0.30, stage: "drive:lane-north", radius: 0.09, speed: 0.13, precision: false}
+  - {x: 0.25, y: 0.05, stage: "drive:lane-north", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 0.38, y: 0.23, stage: "sign:approach:construction", radius: 0.08, speed: 0.08, precision: false}
+  - {x: 0.69, y: 0.24, stage: "sign:approach:construction", radius: 0.05, speed: 0.06, precision: true, pause_sec: 3.0, pause_yaw: -0.06}
+  - {x: 0.95, y: 0.25, stage: "drive:to-construction", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 1.30, y: 0.25, stage: "drive:to-construction", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 1.58, y: 0.27, stage: "avoid:enter", radius: 0.05, speed: 0.08, precision: true}
+  - {x: 1.77, y: 0.36, stage: "avoid:barrier_1", radius: 0.045, speed: 0.075, precision: true}
+  - {x: 1.77, y: 0.67, stage: "avoid:barrier_1", radius: 0.045, speed: 0.075, precision: true}
+  - {x: 1.47, y: 0.84, stage: "avoid:barrier_2", radius: 0.045, speed: 0.075, precision: true}
+  - {x: 1.47, y: 1.15, stage: "avoid:barrier_2", radius: 0.045, speed: 0.075, precision: true}
+  - {x: 1.77, y: 1.32, stage: "avoid:barrier_3", radius: 0.045, speed: 0.075, precision: true}
+  - {x: 1.77, y: 1.60, stage: "avoid:barrier_3", radius: 0.05, speed: 0.085, precision: true}
+  - {x: 1.60, y: 1.74, stage: "drive:to-parking", radius: 0.08, speed: 0.11, precision: false}
+  - {x: 1.32, y: 1.75, stage: "sign:approach:parking", radius: 0.07, speed: 0.06, precision: false}
+  - {x: 1.18, y: 1.75, stage: "sign:approach:parking", radius: 0.05, speed: 0.05, precision: true, pause_sec: 3.0, pause_yaw: 2.92}
+  - {x: 0.70, y: 1.75, stage: "drive:past-parking", radius: 0.08, speed: 0.12, precision: false}
+  - {x: 0.20, y: 1.75, stage: "drive:past-parking", radius: 0.08, speed: 0.12, precision: false}
+  - {x: -0.25, y: 1.75, stage: "drive:chicane", radius: 0.07, speed: 0.10, precision: true}
+  - {x: -0.50, y: 1.64, stage: "drive:chicane", radius: 0.07, speed: 0.10, precision: true}
+  - {x: -0.75, y: 1.75, stage: "drive:chicane", radius: 0.07, speed: 0.10, precision: true}
+  - {x: -1.00, y: 1.86, stage: "drive:chicane", radius: 0.07, speed: 0.10, precision: true}
+  - {x: -1.25, y: 1.75, stage: "drive:chicane", radius: 0.07, speed: 0.10, precision: true}
+  - {x: -1.58, y: 1.75, stage: "drive:top-left-turn", radius: 0.07, speed: 0.10, precision: true}
+  - {x: -1.74, y: 1.60, stage: "drive:top-left-turn", radius: 0.07, speed: 0.10, precision: true}
+  - {x: -1.75, y: 1.40, stage: "sign:approach:stop", radius: 0.06, speed: 0.06, precision: true}
+  - {x: -1.62, y: 1.25, stage: "sign:approach:stop", radius: 0.05, speed: 0.05, precision: true, pause_sec: 3.0, pause_yaw: -0.45}
+  - {x: -1.10, y: 1.25, stage: "drive:level-crossing", radius: 0.05, speed: 0.07, precision: true}
+  - {x: -0.55, y: 1.25, stage: "drive:level-crossing-pass", radius: 0.08, speed: 0.11, precision: false}
+  - {x: -0.32, y: 1.15, stage: "drive:s-curve", radius: 0.07, speed: 0.10, precision: true}
+  - {x: -0.25, y: 0.90, stage: "drive:s-curve", radius: 0.08, speed: 0.12, precision: false}
+  - {x: -0.25, y: 0.45, stage: "drive:s-curve", radius: 0.08, speed: 0.11, precision: false}
+  - {x: -0.40, y: 0.26, stage: "drive:s-curve", radius: 0.07, speed: 0.10, precision: true}
+  - {x: -0.75, y: 0.25, stage: "drive:s-curve", radius: 0.08, speed: 0.11, precision: false}
+  - {x: -1.10, y: 0.26, stage: "drive:s-curve", radius: 0.07, speed: 0.09, precision: true}
+  - {x: -1.25, y: 0.52, stage: "drive:s-curve", radius: 0.07, speed: 0.09, precision: true}
+  - {x: -1.36, y: 0.72, stage: "drive:s-curve", radius: 0.07, speed: 0.09, precision: true}
+  - {x: -1.52, y: 0.75, stage: "drive:s-curve", radius: 0.07, speed: 0.09, precision: true}
+  - {x: -1.68, y: 0.64, stage: "sign:approach:tunnel", radius: 0.06, speed: 0.06, precision: true}
+  - {x: -1.73, y: 0.35, stage: "sign:approach:tunnel", radius: 0.05, speed: 0.05, precision: true, pause_sec: 3.0, pause_yaw: -0.75}
+  - {x: -1.75, y: -0.10, stage: "tunnel:enter", radius: 0.06, speed: 0.09, precision: true}
+  - {x: -1.68, y: -0.55, stage: "tunnel:avoid-obs3", radius: 0.06, speed: 0.09, precision: true}
+  - {x: -1.62, y: -1.00, stage: "tunnel:avoid-obs2", radius: 0.06, speed: 0.09, precision: true}
+  - {x: -1.05, y: -1.02, stage: "tunnel:corridor", radius: 0.06, speed: 0.09, precision: true}
+  - {x: -0.35, y: -0.95, stage: "tunnel:avoid-obs1", radius: 0.06, speed: 0.09, precision: true}
+  - {x: -0.30, y: -1.45, stage: "tunnel:exit-approach", radius: 0.06, speed: 0.09, precision: true}
+  - {x: -0.25, y: -1.74, stage: "tunnel:exit", radius: 0.06, speed: 0.09, precision: true}
+  - {x: 0.25, y: -1.75, stage: "drive:finish-straight", radius: 0.08, speed: 0.12, precision: false}
+  - {x: 0.80, y: -1.75, stage: "drive:finish-line", radius: 0.05, speed: 0.08, precision: true}

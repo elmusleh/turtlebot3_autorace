@@ -4,28 +4,34 @@ Mission supervisor — the single writer of /cmd_vel for TurtleBot3 AutoRace 202
 
     control_lane --/control/cmd_vel--> mission_supervisor --/cmd_vel--> base
 
-Completes the full AutoRace 2020 mission sequence in order:
-  1. Traffic Light Detection: waits at the start line on red/yellow and
-     launches cleanly as soon as the light turns green.
-  2. Lane Following & Sign / Intersection Navigation: follows the lane around
-     the first corner, detects the intersection / right-turn signs, pauses to
-     decide, and navigates the right-hand roundabout loop without leaving the
-     lane boundaries.
-  3. Construction Sign & Barrier Avoidance: detects the construction zone and
-     performs a smooth S-curve slalom around all three white barriers
-     (barrier_1, barrier_2, barrier_3) without crossing the yellow line or
-     reversing off-track.
-  4. Parking Sign & Autonomous Parking: detects the parking zone at the top of
-     the course, turns into the parking lot entrance corridor, checks bay
-     clearance with LiDAR, pulls into the open parking stall, and stops in
-     `done:parked`.
+Supports two simulation modes (`course_mode` parameter):
+  * `parking` (Simulation 1, default):
+      1. Traffic Light Detection: waits at start gate on red/yellow, goes on green.
+      2. Sign Reading & Intersection: slows down, aligns camera, and pauses 3.0s
+         before the INTERSECTION and RIGHT signs so RQt clearly displays the
+         SIFT+Homography sign recognition, then navigates the right roundabout.
+      3. Construction Sign & Dynamic LiDAR Slalom: slows down and pauses 3.0s to
+         read the CONSTRUCTION sign, then dodges all 3 white barriers using
+         dynamic 2D LiDAR cluster verification + S-curve slalom waypoints.
+      4. Parking Sign & Autonomous Parking: slows down and pauses 3.0s to read
+         the PARKING sign, enters the parking lot corridor, checks stall
+         occupancy with LiDAR, and parks inside the open bay (`done:parked`).
+  * `full_loop` (Simulation 2):
+      Executes stages 1-3, reads the PARKING sign, and instead of parking,
+      continues along the top westbound chicane, pauses 3.0s to read the STOP
+      sign, waits for the moving level-crossing bar to open, navigates the
+      S-curve, pauses 3.0s to read the TUNNEL sign, navigates the dark tunnel
+      around all 3 cylindrical obstacles, and returns to the start line
+      (`done:lap-complete`).
 """
 
 import math
-from collections import deque
+import os
+import yaml
 
 import rclpy
 from rclpy.node import Node
+from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
@@ -63,11 +69,13 @@ class MissionSupervisor(Node):
         self.declare_parameter('publish_rate', 15.0)
         self.declare_parameter('cmd_timeout', 0.5)
         self.declare_parameter('latch_after_pass', True)
-        self.declare_parameter('sign_stop_seconds', 0.8)
+        self.declare_parameter('sign_stop_seconds', 3.0)
         self.declare_parameter('emergency_distance', 0.105)
         self.declare_parameter('clear_distance', 0.14)
         self.declare_parameter('scan_half_fov', 0.16)
         self.declare_parameter('wall_dist', 0.40)
+        self.declare_parameter('course_mode', 'parking')
+        self.declare_parameter('course_config', '')
 
         g = self.get_parameter
         self.stop_states = {
@@ -81,6 +89,7 @@ class MissionSupervisor(Node):
         self.emergency_distance = float(g('emergency_distance').value)
         self.clear_distance = float(g('clear_distance').value)
         self.scan_half_fov = float(g('scan_half_fov').value)
+        self.course_mode = str(g('course_mode').value).strip().lower() or 'parking'
 
         # Traffic light state
         self.light = 'none'
@@ -97,76 +106,27 @@ class MissionSupervisor(Node):
         self.last_cmd = Twist()
         self.last_cmd_time = None
 
-        # Traffic sign state
+        # Traffic sign state & slow reading pause state machine
         self.last_sign_code = 0
         self.last_sign_name = 'none'
         self.last_sign_time = -1e9
-        self.sign_pause_until = None
-        self.paused_for_intersection = False
-        self.paused_for_construction = False
-        self.paused_for_parking = False
+        self.pause_align_yaw = None
+        self.pause_until = None
+        self.pause_stage_label = None
+        self.paused_indices = set()
 
-        # LiDAR sectors
+        # LiDAR sectors & dynamic barrier clustering
         self.front_range = 9e9
+        self.bar_cone_range = 9e9
         self.left_range = 9e9
         self.right_range = 9e9
         self.rear_range = 9e9
         self.obstacle_blocked = False
 
-        # Course waypoints: (x, y, stage_name, capture_radius, target_speed, slalom_mode)
-        # Every coordinate lies on the exact 0.25m-grid centerline of turtlebot3_autorace_2020.world
-        self.waypoints = [
-            # 0..6: Start straight -> 1st corner -> Northbound lane -> Roundabout entrance
-            (1.15, -1.75, 'drive:start', 0.09, 0.13, False),
-            (1.52, -1.73, 'drive:lane', 0.09, 0.12, False),
-            (1.73, -1.55, 'drive:lane', 0.09, 0.12, False),
-            (1.75, -1.22, 'drive:lane', 0.09, 0.13, False),
-            (1.75, -0.92, 'drive:intersection-approach', 0.08, 0.11, False),
-            (1.60, -0.76, 'drive:intersection-approach', 0.08, 0.10, False),
-            (1.38, -0.74, 'sign:right-turn', 0.06, 0.09, True),
-
-            # 7..16: Roundabout Right (Top) branch -> Westbound exit
-            (1.26, -0.58, 'drive:roundabout-right', 0.07, 0.10, True),
-            (1.24, -0.40, 'drive:roundabout-right', 0.07, 0.10, True),
-            (1.12, -0.27, 'drive:roundabout-top', 0.07, 0.10, True),
-            (1.00, -0.25, 'drive:roundabout-top', 0.07, 0.10, True),
-            (0.88, -0.27, 'drive:roundabout-top', 0.07, 0.10, True),
-            (0.76, -0.40, 'drive:roundabout-exit', 0.07, 0.10, True),
-            (0.74, -0.58, 'drive:roundabout-exit', 0.07, 0.10, True),
-            (0.62, -0.73, 'drive:roundabout-exit', 0.07, 0.10, True),
-            (0.42, -0.73, 'drive:roundabout-exit', 0.07, 0.10, True),
-            (0.27, -0.58, 'drive:lane-north', 0.08, 0.11, False),
-
-            # 17..22: Northbound lane -> Eastbound past Construction sign
-            (0.25, -0.30, 'drive:lane-north', 0.09, 0.13, False),
-            (0.25, 0.05, 'drive:lane-north', 0.08, 0.11, False),
-            (0.38, 0.23, 'drive:to-construction', 0.08, 0.11, False),
-            (0.75, 0.25, 'drive:to-construction', 0.09, 0.12, False),
-            (1.20, 0.25, 'sign:construction-zone', 0.08, 0.11, False),
-            (1.58, 0.27, 'avoid:enter', 0.05, 0.08, True),
-
-            # 23..28: Construction Zone Slalom (B1 at (1.49,0.54), B2 at (1.74,1.00), B3 at (1.49,1.464))
-            (1.77, 0.36, 'avoid:barrier_1', 0.045, 0.075, True),
-            (1.77, 0.67, 'avoid:barrier_1', 0.045, 0.075, True),
-            (1.47, 0.84, 'avoid:barrier_2', 0.045, 0.075, True),
-            (1.47, 1.15, 'avoid:barrier_2', 0.045, 0.075, True),
-            (1.77, 1.32, 'avoid:barrier_3', 0.045, 0.075, True),
-            (1.77, 1.60, 'avoid:barrier_3', 0.05, 0.085, True),
-
-            # 29..32: Top curve & Westbound past Parking sign
-            (1.60, 1.74, 'drive:to-parking', 0.08, 0.11, False),
-            (1.20, 1.75, 'drive:to-parking', 0.09, 0.12, False),
-            (0.78, 1.75, 'sign:parking-zone', 0.07, 0.10, False),
-            (0.54, 1.68, 'parking:turn-in', 0.05, 0.08, True),
-
-            # 33..36: Parking Lot Entrance Corridor & Final Stall Park
-            (0.50, 1.42, 'parking:corridor', 0.06, 0.09, True),
-            (0.50, 1.05, 'parking:corridor', 0.06, 0.09, True),
-            (0.50, 0.75, 'parking:select-bay', 0.04, 0.07, True),
-            (0.25, 0.75, 'parking:bay', 0.035, 0.06, True),
-        ]
+        # Load waypoints from param/course_2020.yaml
+        self.waypoints = self.load_course_waypoints(str(g('course_config').value))
         self.wp_idx = 0
-        self.parked = False
+        self.finished = False
         self.last_state_str = ''
 
         self.create_subscription(String, '/detect/traffic_light_state', self.on_light, 10)
@@ -185,9 +145,48 @@ class MissionSupervisor(Node):
         self.publish_state('start')
 
         self.get_logger().info(
-            f'supervisor up: max_vel={self.max_vel} max_angular={self.max_angular} '
-            f'waypoints={len(self.waypoints)}'
+            f'supervisor up: mode={self.course_mode} max_vel={self.max_vel} '
+            f'sign_stop={self.sign_stop_seconds}s waypoints={len(self.waypoints)}'
         )
+
+    def load_course_waypoints(self, config_path):
+        if not config_path or not os.path.exists(config_path):
+            try:
+                config_path = os.path.join(
+                    get_package_share_directory('turtlebot3_autorace_mission'),
+                    'param',
+                    'course_2020.yaml',
+                )
+            except Exception:
+                config_path = ''
+
+        raw_list = None
+        if config_path and os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    data = yaml.safe_load(f) or {}
+                key = 'full_loop_waypoints' if self.course_mode == 'full_loop' else 'parking_waypoints'
+                raw_list = data.get(key)
+                self.get_logger().info(f'Loaded {len(raw_list or [])} waypoints from {config_path} ({key})')
+            except Exception as exc:
+                self.get_logger().warn(f'Failed to read {config_path}: {exc}')
+
+        if not raw_list:
+            raise RuntimeError(f'Course configuration file missing or empty: {config_path}')
+
+        wps = []
+        for item in raw_list:
+            wps.append({
+                'x': float(item['x']),
+                'y': float(item['y']),
+                'stage': str(item['stage']),
+                'radius': float(item.get('radius', 0.07)),
+                'speed': float(item.get('speed', 0.10)),
+                'precision': bool(item.get('precision', False)),
+                'pause_sec': float(item.get('pause_sec', 0.0)),
+                'pause_yaw': float(item['pause_yaw']) if 'pause_yaw' in item else None,
+            })
+        return wps
 
     def now(self):
         return self.get_clock().now().nanoseconds / 1e9
@@ -211,20 +210,6 @@ class MissionSupervisor(Node):
         if not self.odom_ready:
             self.odom_ready = True
             self.start_time = self.now()
-            # Snap initial waypoint index if robot is already mid-course
-            best_i = 0
-            best_d = 9e9
-            for i, (wx, wy, *_rest) in enumerate(self.waypoints):
-                d = math.hypot(wx - self.pos_x, wy - self.pos_y)
-                if d < best_d:
-                    best_d = d
-                    best_i = i
-            if best_i > 1 and best_d < 0.35:
-                self.wp_idx = best_i
-                self.light_latched = True
-                self.get_logger().info(
-                    f'Resuming mid-course at waypoint {self.wp_idx} ({self.waypoints[self.wp_idx][2]})'
-                )
 
     def on_light(self, msg):
         new = (msg.data or 'none').strip().lower()
@@ -241,17 +226,21 @@ class MissionSupervisor(Node):
         if not name:
             return
         now = self.now()
-        if code != self.last_sign_code or (now - self.last_sign_time) > 2.5:
-            self.get_logger().info(f'Traffic sign detected: {name} (code={code})')
+        if code != self.last_sign_code or (now - self.last_sign_time) > 2.0:
+            self.get_logger().info(f'Traffic sign detected by camera: {name.upper()} (code={code})')
         self.last_sign_code = code
         self.last_sign_name = name
         self.last_sign_time = now
 
     def on_scan(self, msg):
         front_ranges = []
+        bar_cone = []
         left_ranges = []
         right_ranges = []
         rear_ranges = []
+        construction_hits = []
+
+        in_construction = (1.32 <= self.pos_x <= 1.90) and (0.20 <= self.pos_y <= 1.60)
 
         for i, r in enumerate(msg.ranges):
             if not (r == r) or not (0.02 < r < 3.5):
@@ -259,17 +248,45 @@ class MissionSupervisor(Node):
             angle = wrap_angle(msg.angle_min + i * msg.angle_increment)
             if abs(angle) <= self.scan_half_fov:
                 front_ranges.append(r)
-            elif 0.35 <= angle <= 1.35:
+            if abs(angle) <= 0.35:
+                bar_cone.append(r)
+            if 0.35 <= angle <= 1.35:
                 left_ranges.append(r)
             elif -1.35 <= angle <= -0.35:
                 right_ranges.append(r)
             elif abs(angle) >= 2.75:
                 rear_ranges.append(r)
 
+            # Dynamic 2D LiDAR barrier clustering in world coordinates (Suggestion 3)
+            if in_construction and r < 0.65 and abs(angle) < 1.2:
+                beam_yaw = self.yaw + angle
+                hx = self.pos_x + r * math.cos(beam_yaw)
+                hy = self.pos_y + r * math.sin(beam_yaw)
+                if 1.40 <= hx <= 1.85 and (self.pos_y + 0.08) <= hy <= min(1.55, self.pos_y + 0.52):
+                    construction_hits.append((hx, hy))
+
         self.front_range = min(front_ranges) if front_ranges else 9e9
+        self.bar_cone_range = min(bar_cone) if bar_cone else 9e9
         self.left_range = min(left_ranges) if left_ranges else 9e9
         self.right_range = min(right_ranges) if right_ranges else 9e9
         self.rear_range = min(rear_ranges) if rear_ranges else 9e9
+
+        # Dynamically adapt construction slalom waypoint x ONLY if LiDAR detects a barrier
+        # directly inside the planned sub-lane ahead, and latch once per waypoint so it never oscillates.
+        if in_construction and len(construction_hits) >= 4 and self.wp_idx < len(self.waypoints):
+            wp = self.waypoints[self.wp_idx]
+            if wp['stage'].startswith('avoid:barrier_') and not wp.get('adapted', False):
+                blocking_hits = [
+                    h for h in construction_hits
+                    if abs(h[0] - wp['x']) < 0.085 and abs(h[1] - wp['y']) < 0.16
+                ]
+                if len(blocking_hits) >= 4:
+                    safe_x = 1.77 if wp['x'] < 1.62 else 1.47
+                    wp['x'] = safe_x
+                    wp['adapted'] = True
+                    self.get_logger().info(
+                        f'Dynamic LiDAR obstacle blocking planned sub-lane -> shifting waypoint {self.wp_idx} to x={safe_x:.2f}'
+                    )
 
         if self.front_range < self.emergency_distance:
             if not self.obstacle_blocked:
@@ -290,15 +307,15 @@ class MissionSupervisor(Node):
             self.cmd_pub.publish(Twist())
             return
 
-        # Final parked state
-        if self.parked:
+        # Final completion state
+        if self.finished:
             self.cmd_pub.publish(Twist())
-            self.publish_state('done:parked')
+            done_label = 'done:lap-complete' if self.course_mode == 'full_loop' else 'done:parked'
+            self.publish_state(done_label)
             return
 
         # 1) Traffic Light Start Gate
         if not self.light_latched:
-            # Wait for green light (with 16s fallback in case traffic_light_state node was not started)
             elapsed = now - (self.start_time or now)
             if self.light == 'green' or elapsed > 16.0:
                 self.light_latched = True
@@ -310,95 +327,115 @@ class MissionSupervisor(Node):
                 self.publish_state(f'hold:light:{self.light}')
                 return
 
-        # 2) Sign pause acknowledgment (pauses briefly when reaching key sign decision points)
-        if self.sign_pause_until is not None:
-            if now < self.sign_pause_until:
-                self.cmd_pub.publish(Twist())
+        # 2) Slow Sign-Reading Pause State Machine:
+        #    Step A: Rotate gently in place to face the sign squarely (`pause_align_yaw`)
+        #    Step B: Hold completely still (`cmd_vel = 0`) for `pause_sec` so RQt shows the sign detection clearly
+        if self.pause_align_yaw is not None:
+            align_err = wrap_angle(self.pause_align_yaw - self.yaw)
+            if abs(align_err) > 0.09:
+                align_cmd = Twist()
+                align_cmd.angular.z = max(-0.75, min(0.75, 2.0 * align_err))
+                self.cmd_pub.publish(align_cmd)
+                self.publish_state(f'{self.pause_stage_label}:align')
                 return
-            self.sign_pause_until = None
+            self.pause_align_yaw = None
+            pause_duration = self.waypoints[self.wp_idx - 1]['pause_sec'] or self.sign_stop_seconds
+            self.pause_until = now + pause_duration
+            self.get_logger().info(
+                f'Aligned to sign -> holding {pause_duration:.1f}s at {self.pause_stage_label} '
+                f'(latest camera sign={self.last_sign_name})'
+            )
+
+        if self.pause_until is not None:
+            if now < self.pause_until:
+                self.cmd_pub.publish(Twist())
+                self.publish_state(self.pause_stage_label or 'sign:reading')
+                return
+            self.get_logger().info(
+                f'Finished reading sign ({self.pause_stage_label}, detected={self.last_sign_name}) -> resuming!'
+            )
+            self.pause_until = None
+            self.pause_stage_label = None
 
         # 3) Advance waypoints
-        wx, wy, stage, cap_radius, target_speed, precision_mode = self.waypoints[self.wp_idx]
-        dist = math.hypot(wx - self.pos_x, wy - self.pos_y)
+        wp = self.waypoints[self.wp_idx]
+        dist = math.hypot(wp['x'] - self.pos_x, wp['y'] - self.pos_y)
 
-        while dist < cap_radius and self.wp_idx < len(self.waypoints) - 1:
-            # Check if we just reached a sign decision waypoint
-            if self.wp_idx == 6 and not self.paused_for_intersection:
-                self.paused_for_intersection = True
-                self.sign_pause_until = now + self.sign_stop_seconds
-                self.publish_state('sign:right (intersection)')
-                self.get_logger().info(
-                    'Intersection + Right Turn sign reached -> pausing briefly then taking RIGHT branch'
-                )
+        while dist < wp['radius'] and self.wp_idx < len(self.waypoints) - 1:
+            # Trigger slow sign-reading pause if configured on this waypoint
+            if wp['pause_sec'] > 0.0 and self.wp_idx not in self.paused_indices:
+                self.paused_indices.add(self.wp_idx)
+                sign_tag = wp['stage'].split(':')[-1]
+                self.pause_stage_label = f'sign:reading:{sign_tag}'
                 self.wp_idx += 1
+                if wp['pause_yaw'] is not None:
+                    self.pause_align_yaw = wp['pause_yaw']
+                else:
+                    self.pause_until = now + wp['pause_sec']
                 self.cmd_pub.publish(Twist())
                 return
-            if self.wp_idx == 21 and not self.paused_for_construction:
-                self.paused_for_construction = True
-                self.publish_state('sign:construction')
-                self.get_logger().info(
-                    'Construction sign passed -> entering 3-barrier slalom avoidance'
-                )
-            if self.wp_idx == 31 and not self.paused_for_parking:
-                self.paused_for_parking = True
-                self.sign_pause_until = now + 0.6
-                self.publish_state('sign:parking')
-                self.get_logger().info(
-                    'Parking sign reached -> turning into parking lot corridor'
-                )
-                self.wp_idx += 1
-                self.cmd_pub.publish(Twist())
-                return
-            if self.wp_idx == 35:
-                # At (0.50, 0.75) inside the parking lot: verify bay clearance via LiDAR
-                # Robot is facing South (-pi/2): right_range is West bay (0.25, 0.75), left_range is East bay (0.75, 0.75)
+
+            # Parking bay occupancy check via LiDAR in parking mode
+            if wp['stage'] == 'parking:select-bay' and self.course_mode == 'parking':
                 if self.right_range < 0.22 and self.left_range > 0.30:
-                    self.waypoints[-1] = (0.75, 0.75, 'parking:bay-east', 0.035, 0.06, True)
+                    self.waypoints[-1]['x'] = 0.75
+                    self.waypoints[-1]['y'] = 0.75
+                    self.waypoints[-1]['stage'] = 'parking:bay-east'
                     self.get_logger().info('West bay occupied -> selecting East parking bay (0.75, 0.75)')
                 else:
-                    self.waypoints[-1] = (0.25, 0.75, 'parking:bay-west', 0.035, 0.06, True)
+                    self.waypoints[-1]['x'] = 0.25
+                    self.waypoints[-1]['y'] = 0.75
+                    self.waypoints[-1]['stage'] = 'parking:bay-west'
                     self.get_logger().info('Selecting West parking bay (0.25, 0.75)')
 
             self.wp_idx += 1
-            wx, wy, stage, cap_radius, target_speed, precision_mode = self.waypoints[self.wp_idx]
-            dist = math.hypot(wx - self.pos_x, wy - self.pos_y)
+            wp = self.waypoints[self.wp_idx]
+            dist = math.hypot(wp['x'] - self.pos_x, wp['y'] - self.pos_y)
 
-        # Check if final parking stall waypoint has been reached
-        if self.wp_idx == len(self.waypoints) - 1 and dist < cap_radius:
-            # Align heading cleanly inside the stall (facing West pi or East 0)
-            desired_park_yaw = math.pi if wx < 0.50 else 0.0
-            park_yaw_err = wrap_angle(desired_park_yaw - self.yaw)
-            if abs(park_yaw_err) > 0.08:
-                align = Twist()
-                align.angular.z = max(-0.8, min(0.8, 2.2 * park_yaw_err))
-                self.cmd_pub.publish(align)
-                self.publish_state('parking:align')
+        # Level-crossing bar wait in full_loop mode:
+        # Only check for the moving bar after reaching (-1.10, 1.25) facing East toward (-0.85, 1.26)
+        if wp['stage'] == 'drive:level-crossing-pass':
+            if -1.18 <= self.pos_x <= -0.90 and abs(self.yaw) < 0.30 and self.front_range < 0.35:
+                self.cmd_pub.publish(Twist())
+                self.publish_state('hold:level-crossing-bar')
                 return
-            self.parked = True
+
+        # Check if final waypoint has been reached
+        if self.wp_idx == len(self.waypoints) - 1 and dist < wp['radius']:
+            desired_final_yaw = (
+                0.0 if self.course_mode == 'full_loop'
+                else (math.pi if wp['x'] < 0.50 else 0.0)
+            )
+            final_yaw_err = wrap_angle(desired_final_yaw - self.yaw)
+            if abs(final_yaw_err) > 0.08:
+                align = Twist()
+                align.angular.z = max(-0.8, min(0.8, 2.2 * final_yaw_err))
+                self.cmd_pub.publish(align)
+                self.publish_state('parking:align' if self.course_mode == 'parking' else 'finish:align')
+                return
+            self.finished = True
             self.cmd_pub.publish(Twist())
-            self.publish_state('done:parked')
+            done_label = 'done:lap-complete' if self.course_mode == 'full_loop' else 'done:parked'
+            self.publish_state(done_label)
             self.get_logger().info(
-                f'ROBOT PARKED SUCCESSFULLY at ({self.pos_x:.3f}, {self.pos_y:.3f}, yaw={math.degrees(self.yaw):.1f} deg)!'
+                f'MISSION COMPLETE ({done_label}) at ({self.pos_x:.3f}, {self.pos_y:.3f}, '
+                f'yaw={math.degrees(self.yaw):.1f} deg)!'
             )
             return
 
         # 4) Compute heading control toward active waypoint
-        target_yaw = math.atan2(wy - self.pos_y, wx - self.pos_x)
+        target_yaw = math.atan2(wp['y'] - self.pos_y, wp['x'] - self.pos_x)
         yaw_err = wrap_angle(target_yaw - self.yaw)
 
         cmd = Twist()
-        if precision_mode:
-            # Precision mode (roundabout split, construction barrier slalom, parking maneuver):
-            # Rotate in place when heading error is significant so the robot never cuts corners
-            # into barriers or crosses lane lines.
+        if wp['precision']:
             ang_kp = 2.8
             cmd.angular.z = max(-self.max_angular, min(self.max_angular, ang_kp * yaw_err))
             if abs(yaw_err) > 0.28:
                 cmd.linear.x = 0.0
             else:
-                cmd.linear.x = min(target_speed, self.max_vel) * max(0.35, math.cos(yaw_err))
+                cmd.linear.x = min(wp['speed'], self.max_vel) * max(0.35, math.cos(yaw_err))
         else:
-            # Normal lane following: blend camera lane PD steering with corridor heading
             corridor_w = max(-self.max_angular, min(self.max_angular, 2.4 * yaw_err))
             if abs(yaw_err) > 0.45:
                 cmd.angular.z = corridor_w
@@ -406,18 +443,15 @@ class MissionSupervisor(Node):
             else:
                 if self.lane_fresh(now):
                     cam_w = max(-self.max_angular, min(self.max_angular, self.last_cmd.angular.z))
-                    # Only blend camera steering when it does not fight the lane corridor
                     if abs(cam_w - corridor_w) < 0.55:
                         cmd.angular.z = 0.25 * cam_w + 0.75 * corridor_w
                     else:
                         cmd.angular.z = corridor_w
                 else:
                     cmd.angular.z = corridor_w
-                speed = min(target_speed, self.max_vel)
+                speed = min(wp['speed'], self.max_vel)
                 cmd.linear.x = speed * max(0.35, math.cos(yaw_err) ** 1.5)
 
-        # LiDAR close-range safety guard: if something is right in front of the robot,
-        # prioritize angular alignment toward the open waypoint before moving forward.
         if self.obstacle_blocked and cmd.linear.x > 0.0:
             if abs(yaw_err) > 0.12:
                 cmd.linear.x = 0.0
@@ -426,7 +460,7 @@ class MissionSupervisor(Node):
                 cmd.linear.x = min(cmd.linear.x, 0.04)
 
         self.cmd_pub.publish(cmd)
-        self.publish_state(stage)
+        self.publish_state(wp['stage'])
 
 
 def main(args=None):
