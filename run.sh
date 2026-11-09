@@ -22,6 +22,7 @@ Main Simulation Commands:
   parking         Launch Simulation 1: Traffic Light -> Lane -> Sign Pause -> Slalom -> Parking
   full-loop       Launch Simulation 2: Full 360° course through Level Crossing & Tunnel
   verify          Run automated course verification / regression monitor (optional: --headless)
+  quiz            Run interactive oral defense & Q&A self-quiz CLI
   status          Show nodes/topics currently active
   stop            Stop and clean up all running simulation processes & containers
   clean-docker    Prune dangling Docker images and builder cache
@@ -149,6 +150,10 @@ cmd_clean_docker() {
   echo "Docker clean complete."
 }
 
+cmd_quiz() {
+  python3 "${REPO_DIR}/tools/quiz_me.py"
+}
+
 cmd_build() {
   cmd_humble build
 }
@@ -157,6 +162,7 @@ case "${1:-help}" in
   parking|sim-parking) shift; cmd_parking "$@" ;;
   full-loop|loop|sim-loop) shift; cmd_full_loop "$@" ;;
   verify) shift; cmd_verify "$@" ;;
+  quiz) shift; cmd_quiz "$@" ;;
   humble) shift; cmd_humble "$@" ;;
   build) shift; cmd_build "$@" ;;
   status) cmd_status ;;
