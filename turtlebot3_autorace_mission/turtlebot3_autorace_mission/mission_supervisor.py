@@ -76,6 +76,7 @@ class MissionSupervisor(Node):
         self.declare_parameter('wall_dist', 0.40)
         self.declare_parameter('course_mode', 'parking')
         self.declare_parameter('course_config', '')
+        self.declare_parameter('loop_forever', False)
 
         g = self.get_parameter
         self.stop_states = {
@@ -90,6 +91,8 @@ class MissionSupervisor(Node):
         self.clear_distance = float(g('clear_distance').value)
         self.scan_half_fov = float(g('scan_half_fov').value)
         self.course_mode = str(g('course_mode').value).strip().lower() or 'parking'
+        self.loop_forever = bool(g('loop_forever').value) or (self.course_mode == 'multi_lap')
+        self.lap_count = 0
 
         # Traffic light state
         self.light = 'none'
@@ -165,7 +168,13 @@ class MissionSupervisor(Node):
             try:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     data = yaml.safe_load(f) or {}
-                key = 'full_loop_waypoints' if self.course_mode == 'full_loop' else 'parking_waypoints'
+                if bool(data.get('loop_forever', False)):
+                    self.loop_forever = True
+                key = (
+                    'full_loop_waypoints'
+                    if self.course_mode in ('full_loop', 'multi_lap')
+                    else 'parking_waypoints'
+                )
                 raw_list = data.get(key)
                 self.get_logger().info(f'Loaded {len(raw_list or [])} waypoints from {config_path} ({key})')
             except Exception as exc:
@@ -402,8 +411,20 @@ class MissionSupervisor(Node):
 
         # Check if final waypoint has been reached
         if self.wp_idx == len(self.waypoints) - 1 and dist < wp['radius']:
+            if self.loop_forever:
+                self.lap_count += 1
+                self.wp_idx = 0
+                self.paused_indices.clear()
+                for w in self.waypoints:
+                    w['adapted'] = False
+                self.publish_state(f'lap:{self.lap_count}:complete')
+                self.get_logger().info(
+                    f'Completed lap {self.lap_count} -> wrapping wp_idx=0 for continuous multi-lap mode'
+                )
+                return
+
             desired_final_yaw = (
-                0.0 if self.course_mode == 'full_loop'
+                0.0 if self.course_mode in ('full_loop', 'multi_lap')
                 else (math.pi if wp['x'] < 0.50 else 0.0)
             )
             final_yaw_err = wrap_angle(desired_final_yaw - self.yaw)
@@ -415,7 +436,11 @@ class MissionSupervisor(Node):
                 return
             self.finished = True
             self.cmd_pub.publish(Twist())
-            done_label = 'done:lap-complete' if self.course_mode == 'full_loop' else 'done:parked'
+            done_label = (
+                'done:lap-complete'
+                if self.course_mode in ('full_loop', 'multi_lap')
+                else 'done:parked'
+            )
             self.publish_state(done_label)
             self.get_logger().info(
                 f'MISSION COMPLETE ({done_label}) at ({self.pos_x:.3f}, {self.pos_y:.3f}, '

@@ -20,6 +20,7 @@
 
 import cv2
 from cv_bridge import CvBridge
+from geometry_msgs.msg import Twist
 import numpy as np
 from rcl_interfaces.msg import IntegerRange
 from rcl_interfaces.msg import ParameterDescriptor
@@ -28,7 +29,9 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
 from sensor_msgs.msg import Image
+from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float64
+from std_msgs.msg import String
 from std_msgs.msg import UInt8
 
 
@@ -158,6 +161,14 @@ class DetectLane(Node):
             )
 
         self.pub_lane_state = self.create_publisher(UInt8, '/detect/lane_state', 1)
+
+        # HUD Telemetry subscriptions (/mission/state, /cmd_vel, /scan)
+        self.hud_state = 'starting'
+        self.hud_speed = 0.0
+        self.hud_min_scan = 3.5
+        self.create_subscription(String, '/mission/state', self._cb_hud_state, 10)
+        self.create_subscription(Twist, '/cmd_vel', self._cb_hud_cmd_vel, 10)
+        self.create_subscription(LaserScan, '/scan', self._cb_hud_scan, 10)
 
         self.cvBridge = CvBridge()
 
@@ -609,6 +620,22 @@ class DetectLane(Node):
         final = cv2.addWeighted(cv_image, 1, color_warp, 0.2, 0)
         final = cv2.addWeighted(final, 1, color_warp_lines, 1, 0)
 
+        # Draw compact HUD Telemetry Banner at top of /detect/image_lane
+        overlay = final.copy()
+        fh, fw = final.shape[:2]
+        cv2.rectangle(overlay, (0, 0), (fw, 46), (18, 18, 18), -1)
+        final = cv2.addWeighted(overlay, 0.72, final, 0.28, 0)
+        hud_color = (0, 255, 255) if 'sign:reading' in self.hud_state else (0, 255, 140)
+        hud_text = (
+            f'STAGE: {self.hud_state}  |  '
+            f'SPEED: {self.hud_speed:.2f} m/s  |  '
+            f'LIDAR: {self.hud_min_scan:.2f} m'
+        )
+        cv2.putText(
+            final, hud_text, (16, 31),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.68, hud_color, 2, cv2.LINE_AA
+        )
+
         if self.is_center_x_exist and centerx is not None:
             msg_desired_center = Float64()
             msg_desired_center.data = float(centerx[350]) if len(centerx) > 350 else float(centerx[-1])
@@ -618,6 +645,17 @@ class DetectLane(Node):
             self.pub_image_lane.publish(self.cvBridge.cv2_to_compressed_imgmsg(final, 'jpg'))
         if hasattr(self, 'pub_image_lane_raw') and self.pub_image_lane_raw is not None:
             self.pub_image_lane_raw.publish(self.cvBridge.cv2_to_imgmsg(final, 'bgr8'))
+
+    def _cb_hud_state(self, msg):
+        self.hud_state = msg.data
+
+    def _cb_hud_cmd_vel(self, msg):
+        self.hud_speed = float(msg.linear.x)
+
+    def _cb_hud_scan(self, msg):
+        valid = [r for r in msg.ranges if 0.05 < r < 3.5 and not np.isnan(r) and not np.isinf(r)]
+        if valid:
+            self.hud_min_scan = float(min(valid))
 
 
 def main(args=None):

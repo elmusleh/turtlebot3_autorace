@@ -15,7 +15,7 @@ chmod 600 "$XAUTH_FILE"
 if command -v xauth >/dev/null 2>&1 && [ -n "${DISPLAY:-}" ]; then
     xauth nlist "${DISPLAY}" 2>/dev/null | sed -e 's/^..../ffff/' | xauth -f "$XAUTH_FILE" nmerge - 2>/dev/null || true
 fi
-xhost +SI:localuser:root >/dev/null 2>&1 || true
+xhost +SI:localuser:"$(id -un)" >/dev/null 2>&1 || true
 
 # Clean up any leftover containers
 docker ps -q --filter "ancestor=autorace:humble" | xargs -r docker rm -f 2>/dev/null || true
@@ -25,16 +25,18 @@ echo " Starting TurtleBot3 AutoRace 2020 (Mode: ${COURSE_MODE})"
 echo " Tasks included:"
 echo "   1. Gazebo Simulation (turtlebot3_autorace_2020 world)"
 echo "   2. Camera Pipeline (Intrinsic + Extrinsic Compensation)"
-echo "   3. Lane Detection & Traffic Light State Recognition"
-echo "   4. Slow Sign Reading (3.0s pause + RQt visual match)"
-echo "   5. Dynamic LiDAR Slalom + Mission (${COURSE_MODE})"
+echo "   3. Lane Detection (with HUD Banner) & Traffic Light State"
+echo "   4. Slow Sign Reading (3.0s pause + Yellow Box Overlay)"
+echo "   5. Dynamic LiDAR Slalom + Mission (${COURSE_MODE}) + MP4 Recorder"
 echo "=========================================================="
 
 docker run -it --rm \
+  --user "$(id -u):$(id -g)" \
   --entrypoint /bin/bash \
   --net=host \
   --ipc=host \
   --privileged \
+  -e HOME=/home/ros \
   -e DISPLAY="${DISPLAY:-:0}" \
   -e XAUTHORITY="$XAUTH_FILE" \
   -e QT_X11_NO_MITSHM=1 \

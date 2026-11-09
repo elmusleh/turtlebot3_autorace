@@ -1,0 +1,47 @@
+FROM osrf/ros:humble-desktop-full
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TURTLEBOT3_MODEL=burger_cam
+ENV ROS_DISTRO=humble
+
+# Install apt dependencies for AutoRace, TurtleBot3, Nav2, Gazebo Classic, and tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip \
+    python3-colcon-common-extensions \
+    ros-humble-turtlebot3 \
+    ros-humble-turtlebot3-msgs \
+    ros-humble-turtlebot3-gazebo \
+    ros-humble-turtlebot3-navigation2 \
+    ros-humble-navigation2 \
+    ros-humble-nav2-bringup \
+    ros-humble-controller-manager \
+    ros-humble-dynamixel-hardware-interface \
+    sudo \
+    tmux \
+    wget \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python ML / Computer Vision dependencies
+RUN pip3 install --no-cache-dir \
+    "numpy<2" \
+    "opencv-python<4.10" \
+    "setuptools<70" \
+    "packaging>=22" \
+    ultralytics
+
+# Create non-root 'ros' user matching host UID/GID 1000 while keeping /root accessible for symlink-install paths
+RUN groupadd -g 1000 ros 2>/dev/null || true \
+    && useradd -m -u 1000 -g 1000 -G sudo,video,plugdev -s /bin/bash ros \
+    && echo "ros ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ros \
+    && chmod 0440 /etc/sudoers.d/ros \
+    && chmod 755 /root \
+    && if [ -d /root/.gazebo ]; then cp -r /root/.gazebo /home/ros/.gazebo && chown -R 1000:1000 /home/ros/.gazebo; fi
+
+USER ros
+ENV HOME=/home/ros
+WORKDIR /root/ros2_humble_ws
+
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["source /opt/ros/humble/setup.bash && [ -f /root/ros2_humble_ws/install/setup.bash ] && source /root/ros2_humble_ws/install/setup.bash; exec bash"]

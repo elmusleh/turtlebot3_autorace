@@ -1,0 +1,54 @@
+name: ROS 2 Humble CI
+
+on:
+  push:
+    branches: [humble, main]
+  pull_request:
+    branches: [humble, main]
+
+jobs:
+  build-and-lint:
+    name: Build & Verify ROS 2 Humble Packages
+    runs-on: ubuntu-22.04
+    container:
+      image: ros:humble-ros-base
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          path: ws/src/turtlebot3_autorace
+
+      - name: Install ROS 2 Humble build and lint dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            python3-colcon-common-extensions \
+            python3-flake8 \
+            python3-numpy \
+            python3-opencv \
+            python3-yaml \
+            ros-humble-cv-bridge
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Lint Python syntax & undefined symbols (flake8)
+        working-directory: ws/src/turtlebot3_autorace
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Verify YAML course configuration
+        working-directory: ws/src/turtlebot3_autorace
+        run: |
+          python3 -c "
+          import yaml
+          with open('turtlebot3_autorace_mission/param/course_2020.yaml') as f:
+              cfg = yaml.safe_load(f)
+          assert len(cfg['parking_waypoints']) > 10
+          assert len(cfg['full_loop_waypoints']) > 30
+          print('YAML config verified:', len(cfg['parking_waypoints']), len(cfg['full_loop_waypoints']))
+          "
+
+      - name: Build ROS 2 workspace with colcon
+        working-directory: ws
+        run: |
+          bash -c "source /opt/ros/humble/setup.bash && colcon build --symlink-install --event-handlers console_direct+"

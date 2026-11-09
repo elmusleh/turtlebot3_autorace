@@ -40,6 +40,7 @@ setup(
             'control_lane = turtlebot3_autorace_mission.control_lane:main',
             'mission_supervisor = turtlebot3_autorace_mission.mission_supervisor:main',
             'mission_tunnel = turtlebot3_autorace_mission.mission_tunnel:main',
+            'record_demo_video = turtlebot3_autorace_mission.record_demo_video:main',
         ],
     },
 )

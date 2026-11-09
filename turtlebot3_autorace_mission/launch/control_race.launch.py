@@ -31,6 +31,10 @@ def generate_launch_description():
         DeclareLaunchArgument('course_mode', default_value='parking'),
         DeclareLaunchArgument('sign_stop_seconds', default_value='3.0'),
         DeclareLaunchArgument('course_config', default_value=default_yaml),
+        DeclareLaunchArgument('record_video', default_value='true'),
+        DeclareLaunchArgument(
+            'video_output_path', default_value='/root/ros2_humble_ws/demo_recording.mp4'
+        ),
 
         Node(
             package='turtlebot3_autorace_mission',
@@ -53,6 +57,16 @@ def generate_launch_description():
                 'course_mode': LaunchConfiguration('course_mode'),
                 'sign_stop_seconds': LaunchConfiguration('sign_stop_seconds'),
                 'course_config': LaunchConfiguration('course_config'),
+            }],
+        ),
+        Node(
+            package='turtlebot3_autorace_mission',
+            executable='record_demo_video',
+            name='record_demo_video',
+            output='screen',
+            parameters=[{
+                'enabled': LaunchConfiguration('record_video'),
+                'output_path': LaunchConfiguration('video_output_path'),
             }],
         ),
     ])
