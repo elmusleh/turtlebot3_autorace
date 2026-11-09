@@ -625,15 +625,22 @@ class DetectLane(Node):
         fh, fw = final.shape[:2]
         cv2.rectangle(overlay, (0, 0), (fw, 46), (18, 18, 18), -1)
         final = cv2.addWeighted(overlay, 0.72, final, 0.28, 0)
-        hud_color = (0, 255, 255) if 'sign:reading' in self.hud_state else (0, 255, 140)
-        hud_text = (
-            f'STAGE: {self.hud_state}  |  '
-            f'SPEED: {self.hud_speed:.2f} m/s  |  '
-            f'LIDAR: {self.hud_min_scan:.2f} m'
-        )
+        
+        # Color warning: red if obstacle < 0.35m, yellow if sign reading, green otherwise
+        if self.hud_min_scan < 0.35:
+            hud_color = (0, 80, 255)  # Orange/Red alert
+            lidar_tag = f'LIDAR: {self.hud_min_scan:.2f} m [OBSTACLE!]'
+        elif 'sign:reading' in self.hud_state:
+            hud_color = (0, 255, 255)  # Yellow
+            lidar_tag = f'LIDAR: {self.hud_min_scan:.2f} m'
+        else:
+            hud_color = (0, 255, 140)  # Green
+            lidar_tag = f'LIDAR: {self.hud_min_scan:.2f} m'
+
+        hud_text = f'STAGE: {self.hud_state}  |  SPEED: {self.hud_speed:.2f} m/s  |  {lidar_tag}'
         cv2.putText(
             final, hud_text, (16, 31),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.68, hud_color, 2, cv2.LINE_AA
+            cv2.FONT_HERSHEY_SIMPLEX, 0.65, hud_color, 2, cv2.LINE_AA
         )
 
         if self.is_center_x_exist and centerx is not None:
