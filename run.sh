@@ -46,12 +46,12 @@ EOF
 
 cmd_parking() {
   echo "== Launching Simulation 1: Parking Mode =="
-  COURSE_MODE=parking "${REPO_DIR}/run_autorace_humble.sh" "$@"
+  COURSE_MODE=parking "${REPO_DIR}/scripts/run_autorace_humble.sh" "$@"
 }
 
 cmd_full_loop() {
   echo "== Launching Simulation 2: Full Course Loop =="
-  "${REPO_DIR}/run_autorace_full_loop.sh" "$@"
+  "${REPO_DIR}/scripts/run_autorace_full_loop.sh" "$@"
 }
 
 cmd_verify() {
