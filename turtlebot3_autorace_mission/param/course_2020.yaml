@@ -9,6 +9,7 @@
 #   pause_yaw: Optional target yaw (rad) to face the traffic sign squarely during pause
 
 sign_stop_seconds: 3.0
+exit_parking_after_seconds: 0.0
 loop_forever: false
 
 # Simulation 1 (Default): Traffic Light -> Intersection -> Construction Slalom -> Autonomous Parking

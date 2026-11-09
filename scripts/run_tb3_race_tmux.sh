@@ -21,6 +21,7 @@ WS=/root/ros2_humble_ws
 SESSION=${SESSION:-race}
 MISSION=${MISSION:-intersection}
 COURSE_MODE=${COURSE_MODE:-parking}
+HEADLESS=${HEADLESS:-0}
 
 export TURTLEBOT3_MODEL=burger_cam
 export GAZEBO_MODEL_PATH=$WS/install/turtlebot3_gazebo/share/turtlebot3_gazebo/models
@@ -56,7 +57,12 @@ tmux kill-session -t "$SESSION" 2>/dev/null
 
 # ---- window 0: simulation --------------------------------------------
 SIM=$(tmux new-session -d -s "$SESSION" -n sim -x 220 -y 55 -P -F "#{pane_id}")
-tmux send-keys -t "$SIM" "$SRC; echo '=== GAZEBO (autorace_2020) ==='; ros2 launch turtlebot3_gazebo turtlebot3_autorace_2020.launch.py" C-m
+if [ "$HEADLESS" = "1" ]; then
+    tmux send-keys -t "$SIM" "$SRC; echo '=== GAZEBO HEADLESS (autorace_2020) ==='; ros2 launch turtlebot3_gazebo turtlebot3_autorace_2020.launch.py gui:=false" C-m
+    pkill -9 -f "[g]zclient" 2>/dev/null || true
+else
+    tmux send-keys -t "$SIM" "$SRC; echo '=== GAZEBO (autorace_2020) ==='; ros2 launch turtlebot3_gazebo turtlebot3_autorace_2020.launch.py" C-m
+fi
 
 # ---- window 1: camera pipeline ---------------------------------------
 CAM=$(tmux new-window -t "$SESSION" -n camera -P -F "#{pane_id}")
@@ -85,19 +91,17 @@ tmux send-keys -t "$CTL_HZ" "$SRC; sleep 42; echo '=== LIVE /cmd_vel RATE ==='; 
 tmux select-layout -t "$CTL" tiled
 
 # ---- window 4: GUI views ---------------------------------------------
-# Opened IMMEDIATELY (no sleep): rqt/rviz stay blank until data arrives and
-# populate by themselves, so you can watch the robot from second one.
-# NOTE: rqt_image_view is a plugin, not a PATH binary - it must be started
-# through `ros2 run`, otherwise the pane dies with "command not found".
-VW=$(tmux new-window -t "$SESSION" -n views -P -F "#{pane_id}")
-tmux send-keys -t "$VW" "$SRC; echo '=== RQT: camera (compensated) ==='; ros2 run rqt_image_view rqt_image_view /camera/image_compensated" C-m
-VW_RV=$(tmux split-window -h -t "$VW" -P -F "#{pane_id}")
-tmux send-keys -t "$VW_RV" "$SRC; echo '=== RVIZ2 ==='; rviz2 -d $WS/install/turtlebot3_gazebo/share/turtlebot3_gazebo/rviz/tb3_gazebo.rviz" C-m
-VW_LT=$(tmux split-window -v -t "$VW_RV" -P -F "#{pane_id}")
-tmux send-keys -t "$VW_LT" "$SRC; echo '=== RQT: lane detection (annotated) ==='; ros2 run rqt_image_view rqt_image_view /detect/image_lane" C-m
-VW_SG=$(tmux split-window -v -t "$VW" -P -F "#{pane_id}")
-tmux send-keys -t "$VW_SG" "$SRC; echo '=== RQT: sign detection (annotated) ==='; ros2 run rqt_image_view rqt_image_view /detect/image_traffic_sign" C-m
-tmux select-layout -t "$VW" tiled
+if [ "$HEADLESS" != "1" ]; then
+    VW=$(tmux new-window -t "$SESSION" -n views -P -F "#{pane_id}")
+    tmux send-keys -t "$VW" "$SRC; echo '=== RQT: camera (compensated) ==='; ros2 run rqt_image_view rqt_image_view /camera/image_compensated" C-m
+    VW_RV=$(tmux split-window -h -t "$VW" -P -F "#{pane_id}")
+    tmux send-keys -t "$VW_RV" "$SRC; echo '=== RVIZ2 ==='; rviz2 -d $WS/install/turtlebot3_gazebo/share/turtlebot3_gazebo/rviz/tb3_gazebo.rviz" C-m
+    VW_LT=$(tmux split-window -v -t "$VW_RV" -P -F "#{pane_id}")
+    tmux send-keys -t "$VW_LT" "$SRC; echo '=== RQT: lane detection (annotated) ==='; ros2 run rqt_image_view rqt_image_view /detect/image_lane" C-m
+    VW_SG=$(tmux split-window -v -t "$VW" -P -F "#{pane_id}")
+    tmux send-keys -t "$VW_SG" "$SRC; echo '=== RQT: sign detection (annotated) ==='; ros2 run rqt_image_view rqt_image_view /detect/image_traffic_sign" C-m
+    tmux select-layout -t "$VW" tiled
+fi
 
 tmux set-option -t "$SESSION" -g remain-on-exit on \; set-option -g mouse on \; set-option -g history-limit 20000
 tmux select-window -t "$SESSION:control"

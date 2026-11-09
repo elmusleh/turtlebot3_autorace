@@ -8,6 +8,7 @@ and /scan until the mission reaches its terminal state (`done:parked` or
 writes `/root/ros2_humble_ws/last_run_traj.txt`.
 """
 
+import subprocess
 import sys
 import time
 import rclpy
@@ -99,7 +100,14 @@ class CourseVerifier(Node):
 
 
 def main():
-    timeout = float(sys.argv[1]) if len(sys.argv) > 1 else 280.0
+    args = [a for a in sys.argv[1:] if a != '--headless']
+    if '--headless' in sys.argv:
+        subprocess.run(
+            ['bash', '-c', 'HEADLESS=1 bash /root/ros2_humble_ws/run_tb3_race_tmux.sh'],
+            check=False,
+        )
+        time.sleep(38.0)
+    timeout = float(args[0]) if args else 280.0
     rclpy.init()
     node = CourseVerifier(timeout_sec=timeout)
     try:

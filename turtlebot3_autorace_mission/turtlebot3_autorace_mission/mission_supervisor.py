@@ -77,6 +77,7 @@ class MissionSupervisor(Node):
         self.declare_parameter('course_mode', 'parking')
         self.declare_parameter('course_config', '')
         self.declare_parameter('loop_forever', False)
+        self.declare_parameter('exit_parking_after_seconds', 0.0)
 
         g = self.get_parameter
         self.stop_states = {
@@ -92,6 +93,7 @@ class MissionSupervisor(Node):
         self.scan_half_fov = float(g('scan_half_fov').value)
         self.course_mode = str(g('course_mode').value).strip().lower() or 'parking'
         self.loop_forever = bool(g('loop_forever').value) or (self.course_mode == 'multi_lap')
+        self.exit_parking_after_seconds = float(g('exit_parking_after_seconds').value)
         self.lap_count = 0
 
         # Traffic light state
@@ -170,12 +172,36 @@ class MissionSupervisor(Node):
                     data = yaml.safe_load(f) or {}
                 if bool(data.get('loop_forever', False)):
                     self.loop_forever = True
-                key = (
-                    'full_loop_waypoints'
-                    if self.course_mode in ('full_loop', 'multi_lap')
-                    else 'parking_waypoints'
-                )
-                raw_list = data.get(key)
+                if self.exit_parking_after_seconds <= 0.0:
+                    self.exit_parking_after_seconds = float(
+                        data.get('exit_parking_after_seconds', 0.0)
+                    )
+                if self.course_mode == 'park_and_loop' or self.exit_parking_after_seconds > 0.0:
+                    park_wps = list(data.get('parking_waypoints') or [])
+                    full_wps = list(data.get('full_loop_waypoints') or [])
+                    if park_wps and full_wps:
+                        park_wps[-1] = dict(
+                            park_wps[-1],
+                            pause_sec=max(3.0, self.exit_parking_after_seconds or 3.0),
+                            pause_yaw=math.pi,
+                        )
+                        resume_wps = [
+                            {'x': 0.50, 'y': 0.75, 'stage': 'parking:exit', 'radius': 0.06, 'speed': 0.07, 'precision': True},
+                            {'x': 0.50, 'y': 1.25, 'stage': 'parking:exit-north', 'radius': 0.07, 'speed': 0.09, 'precision': True},
+                            {'x': 0.50, 'y': 1.72, 'stage': 'parking:rejoin-track', 'radius': 0.07, 'speed': 0.09, 'precision': True},
+                        ] + [w for w in full_wps if float(w['x']) <= 0.25 or float(w['y']) < 1.70][-22:]
+                        raw_list = park_wps + resume_wps
+                        key = 'park_and_loop'
+                    else:
+                        key = 'full_loop_waypoints'
+                        raw_list = full_wps
+                else:
+                    key = (
+                        'full_loop_waypoints'
+                        if self.course_mode in ('full_loop', 'multi_lap')
+                        else 'parking_waypoints'
+                    )
+                    raw_list = data.get(key)
                 self.get_logger().info(f'Loaded {len(raw_list or [])} waypoints from {config_path} ({key})')
             except Exception as exc:
                 self.get_logger().warn(f'Failed to read {config_path}: {exc}')
