@@ -272,6 +272,32 @@ add_card(s10, Inches(6.8), Inches(1.4), Inches(5.6), Inches(5.4), "Educational L
     ("Ground Truth Task Map", "docs/media/track_task_map.png: High-resolution Cartesian coordinate reference.")
 ])
 
+# ==========================================================
+# SLIDE 11: Visual Autonomous Mission Flowchart Slide
+# ==========================================================
+s11 = prs.slides.add_slide(blank_layout)
+bg11 = s11.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, prs.slide_width, prs.slide_height)
+bg11.fill.solid()
+bg11.fill.fore_color.rgb = C_BG
+bg11.line.fill.background()
+
+fc_img_path = '/home/steve/dev/ros2_exmaple/turtlebot3_autorace/docs/media/mission_flowchart_widescreen.png'
+if os.path.exists(fc_img_path):
+    s11.shapes.add_picture(fc_img_path, Inches(0.2), Inches(0.15), width=Inches(12.933))
+
+# ==========================================================
+# SLIDE 12: Visual System Architecture Diagram Slide
+# ==========================================================
+s12 = prs.slides.add_slide(blank_layout)
+bg12 = s12.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, prs.slide_width, prs.slide_height)
+bg12.fill.solid()
+bg12.fill.fore_color.rgb = C_BG
+bg12.line.fill.background()
+
+arch_img_path = '/home/steve/dev/ros2_exmaple/turtlebot3_autorace/docs/media/architecture_diagram.png'
+if os.path.exists(arch_img_path):
+    s12.shapes.add_picture(arch_img_path, Inches(0.2), Inches(0.15), width=Inches(12.933))
+
 # Save presentation
 out_path = '/home/steve/dev/ros2_exmaple/turtlebot3_autorace/docs/TurtleBot3_AutoRace_2020_Presentation.pptx'
 prs.save(out_path)
