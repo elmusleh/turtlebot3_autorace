@@ -45,6 +45,8 @@ def generate_launch_description():
         executable='detect_lane',
         name='detect_lane',
         output='screen',
+        respawn=True,
+        respawn_delay=2.0,
         parameters=[
             {'is_detection_calibration_mode': calibration_mode},
             detect_param

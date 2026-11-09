@@ -62,7 +62,7 @@ class DetectLane(Node):
                     parameter_descriptor_saturation_lightness),
                 ('detect.lane.white.saturation_h', 70,
                     parameter_descriptor_saturation_lightness),
-                ('detect.lane.white.lightness_l', 105,
+                ('detect.lane.white.lightness_l', 180,
                     parameter_descriptor_saturation_lightness),
                 ('detect.lane.white.lightness_h', 255,
                     parameter_descriptor_saturation_lightness),
@@ -110,8 +110,7 @@ class DetectLane(Node):
 
         self.is_calibration_mode = self.get_parameter(
             'is_detection_calibration_mode').get_parameter_value().bool_value
-        if self.is_calibration_mode:
-            self.add_on_set_parameters_callback(self.cbGetDetectLaneParam)
+        self.add_on_set_parameters_callback(self.cbGetDetectLaneParam)
 
         self.sub_image_type = 'raw'         # you can choose image type 'compressed', 'raw'
         self.pub_image_type = 'compressed'  # you can choose image type 'compressed', 'raw'
@@ -125,14 +124,12 @@ class DetectLane(Node):
                 Image, '/detect/image_input', self.cbFindLane, 1
                 )
 
-        if self.pub_image_type == 'compressed':
-            self.pub_image_lane = self.create_publisher(
-                CompressedImage, '/detect/image_output/compressed', 1
-                )
-        elif self.pub_image_type == 'raw':
-            self.pub_image_lane = self.create_publisher(
-                Image, '/detect/image_output', 1
-                )
+        self.pub_image_lane = self.create_publisher(
+            CompressedImage, '/detect/image_output/compressed', 1
+        )
+        self.pub_image_lane_raw = self.create_publisher(
+            Image, '/detect/image_output', 1
+        )
 
         if self.is_calibration_mode:
             if self.pub_image_type == 'compressed':
@@ -225,8 +222,15 @@ class DetectLane(Node):
         white_fraction, cv_white_lane = self.maskWhiteLane(cv_image)
         yellow_fraction, cv_yellow_lane = self.maskYellowLane(cv_image)
 
+        if yellow_fraction <= 3000:
+            self.mov_avg_left = np.empty((0, 3))
+        if white_fraction <= 3000:
+            self.mov_avg_right = np.empty((0, 3))
+
         try:
             if yellow_fraction > 3000:
+                if self.mov_avg_left.shape[0] == 0:
+                    raise ValueError('reinit yellow')
                 self.left_fitx, self.left_fit = self.fit_from_lines(
                     self.left_fit, cv_yellow_lane)
                 self.mov_avg_left = np.append(
@@ -234,6 +238,8 @@ class DetectLane(Node):
                     )
 
             if white_fraction > 3000:
+                if self.mov_avg_right.shape[0] == 0:
+                    raise ValueError('reinit white')
                 self.right_fitx, self.right_fit = self.fit_from_lines(
                     self.right_fit, cv_white_lane)
                 self.mov_avg_right = np.append(
@@ -250,16 +256,18 @@ class DetectLane(Node):
 
         MOV_AVG_LENGTH = 5
 
-        self.left_fit = np.array([
-            np.mean(self.mov_avg_left[::-1][:, 0][0:MOV_AVG_LENGTH]),
-            np.mean(self.mov_avg_left[::-1][:, 1][0:MOV_AVG_LENGTH]),
-            np.mean(self.mov_avg_left[::-1][:, 2][0:MOV_AVG_LENGTH])
-            ])
-        self.right_fit = np.array([
-            np.mean(self.mov_avg_right[::-1][:, 0][0:MOV_AVG_LENGTH]),
-            np.mean(self.mov_avg_right[::-1][:, 1][0:MOV_AVG_LENGTH]),
-            np.mean(self.mov_avg_right[::-1][:, 2][0:MOV_AVG_LENGTH])
-            ])
+        if self.mov_avg_left.shape[0] > 0:
+            self.left_fit = np.array([
+                np.mean(self.mov_avg_left[::-1][:, 0][0:MOV_AVG_LENGTH]),
+                np.mean(self.mov_avg_left[::-1][:, 1][0:MOV_AVG_LENGTH]),
+                np.mean(self.mov_avg_left[::-1][:, 2][0:MOV_AVG_LENGTH])
+                ])
+        if self.mov_avg_right.shape[0] > 0:
+            self.right_fit = np.array([
+                np.mean(self.mov_avg_right[::-1][:, 0][0:MOV_AVG_LENGTH]),
+                np.mean(self.mov_avg_right[::-1][:, 1][0:MOV_AVG_LENGTH]),
+                np.mean(self.mov_avg_right[::-1][:, 2][0:MOV_AVG_LENGTH])
+                ])
 
         if self.mov_avg_left.shape[0] > 1000:
             self.mov_avg_left = self.mov_avg_left[0:MOV_AVG_LENGTH]
@@ -291,7 +299,7 @@ class DetectLane(Node):
                 if self.lightness_white_l < 250:
                     self.lightness_white_l += 5
             elif fraction_num < 5000:
-                if self.lightness_white_l > 50:
+                if self.lightness_white_l > 165:
                     self.lightness_white_l -= 5
 
         how_much_short = 0
@@ -397,6 +405,8 @@ class DetectLane(Node):
 
         x = nonzerox[lane_inds]
         y = nonzeroy[lane_inds]
+        if len(x) < 150:
+            raise ValueError('insufficient lane pixels in margin')
 
         lane_fit = np.polyfit(y, x, 2)
 
@@ -502,11 +512,13 @@ class DetectLane(Node):
                 thickness=25
                 )
 
-        self.is_center_x_exist = True
+        self.is_center_x_exist = False
+        centerx = None
 
         if self.reliability_white_line > 50 and self.reliability_yellow_line > 50:
             if white_fraction > 3000 and yellow_fraction > 3000:
                 centerx = np.mean([self.left_fitx, self.right_fitx], axis=0)
+                self.is_center_x_exist = True
                 pts = np.hstack((pts_left, pts_right))
                 pts_center = np.array([np.transpose(np.vstack([centerx, ploty]))])
 
@@ -525,6 +537,7 @@ class DetectLane(Node):
 
             if white_fraction > 3000 and yellow_fraction <= 3000:
                 centerx = np.subtract(self.right_fitx, 280)
+                self.is_center_x_exist = True
                 pts_center = np.array([np.transpose(np.vstack([centerx, ploty]))])
 
                 lane_state.data = 3
@@ -539,6 +552,7 @@ class DetectLane(Node):
 
             if white_fraction <= 3000 and yellow_fraction > 3000:
                 centerx = np.add(self.left_fitx, 280)
+                self.is_center_x_exist = True
                 pts_center = np.array([np.transpose(np.vstack([centerx, ploty]))])
 
                 lane_state.data = 1
@@ -553,6 +567,7 @@ class DetectLane(Node):
 
         elif self.reliability_white_line <= 50 and self.reliability_yellow_line > 50:
             centerx = np.add(self.left_fitx, 280)
+            self.is_center_x_exist = True
             pts_center = np.array([np.transpose(np.vstack([centerx, ploty]))])
 
             lane_state.data = 1
@@ -567,6 +582,7 @@ class DetectLane(Node):
 
         elif self.reliability_white_line > 50 and self.reliability_yellow_line <= 50:
             centerx = np.subtract(self.right_fitx, 280)
+            self.is_center_x_exist = True
             pts_center = np.array([np.transpose(np.vstack([centerx, ploty]))])
 
             lane_state.data = 3
@@ -593,23 +609,15 @@ class DetectLane(Node):
         final = cv2.addWeighted(cv_image, 1, color_warp, 0.2, 0)
         final = cv2.addWeighted(final, 1, color_warp_lines, 1, 0)
 
-        if self.pub_image_type == 'compressed':
-            if self.is_center_x_exist:
-                # publishes lane center
-                msg_desired_center = Float64()
-                msg_desired_center.data = centerx.item(350)
-                self.pub_lane.publish(msg_desired_center)
+        if self.is_center_x_exist and centerx is not None:
+            msg_desired_center = Float64()
+            msg_desired_center.data = float(centerx[350]) if len(centerx) > 350 else float(centerx[-1])
+            self.pub_lane.publish(msg_desired_center)
 
+        if hasattr(self, 'pub_image_lane') and self.pub_image_lane is not None:
             self.pub_image_lane.publish(self.cvBridge.cv2_to_compressed_imgmsg(final, 'jpg'))
-
-        elif self.pub_image_type == 'raw':
-            if self.is_center_x_exist:
-                # publishes lane center
-                msg_desired_center = Float64()
-                msg_desired_center.data = centerx.item(350)
-                self.pub_lane.publish(msg_desired_center)
-
-            self.pub_image_lane.publish(self.cvBridge.cv2_to_imgmsg(final, 'bgr8'))
+        if hasattr(self, 'pub_image_lane_raw') and self.pub_image_lane_raw is not None:
+            self.pub_image_lane_raw.publish(self.cvBridge.cv2_to_imgmsg(final, 'bgr8'))
 
 
 def main(args=None):

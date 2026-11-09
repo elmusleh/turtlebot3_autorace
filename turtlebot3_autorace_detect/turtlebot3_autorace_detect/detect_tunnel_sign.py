@@ -75,8 +75,11 @@ class DetectSign(Node):
         # Initiate SIFT detector
         self.sift = cv2.SIFT_create()
 
-        dir_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-        dir_path = os.path.join(dir_path, 'image')
+        try:
+            from ament_index_python.packages import get_package_share_directory
+            dir_path = os.path.join(get_package_share_directory('turtlebot3_autorace_detect'), 'image')
+        except Exception:
+            dir_path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'image')
 
         self.img_tunnel = cv2.imread(dir_path + '/tunnel.png', 0)  # trainImage3
         self.kp_tunnel, self.des_tunnel = self.sift.detectAndCompute(self.img_tunnel, None)

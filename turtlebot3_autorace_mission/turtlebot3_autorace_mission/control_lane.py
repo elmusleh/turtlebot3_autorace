@@ -61,7 +61,7 @@ class ControlLane(Node):
 
         # PD control related variables
         self.last_error = 0
-        self.MAX_VEL = 0.1
+        self.MAX_VEL = 0.2
 
         # Avoidance mode related variables
         self.avoid_active = False
@@ -89,8 +89,9 @@ class ControlLane(Node):
         self.last_error = error
 
         twist = Twist()
-        # Linear velocity: adjust speed based on error (maximum 0.05 limit)
-        twist.linear.x = min(self.MAX_VEL * (max(1 - abs(error) / 500, 0) ** 2.2), 0.05)
+        # Linear velocity: ensure robot keeps moving even during large corrective turns
+        scale = max(0.2, (max(1.0 - abs(error) / 600.0, 0.0) ** 2.0))
+        twist.linear.x = max(0.04, min(self.MAX_VEL * scale, 0.2))
         twist.angular.z = -max(angular_z, -2.0) if angular_z < 0 else -min(angular_z, 2.0)
         self.pub_cmd_vel.publish(twist)
 
