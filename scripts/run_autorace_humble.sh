@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-WS_DIR="/home/steve/dev/ros2_exmaple/ros2_humble_ws"
+WS_DIR="${AUTORACE_WS:-${PROJECT_DIR}/ros2_humble_ws}"
 COURSE_MODE="${COURSE_MODE:-parking}"
 
 # Scoped X11 cookie authentication

@@ -1,3 +1,23 @@
+# Python bytecode & cache
 __pycache__/
 *.py[cod]
+*$py.class
 *.orig
+
+# ROS 2 build artifacts & logs
+ros2_humble_ws/
+build/
+install/
+log/
+
+# Recorded demo videos
+*.mp4
+*.avi
+
+# Editor & OS temporary files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store

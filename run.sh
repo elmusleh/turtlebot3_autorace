@@ -9,7 +9,7 @@
 
 set +u
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WS_DIR="${AUTORACE_WS:-/home/steve/dev/ros2_exmaple/ros2_humble_ws}"
+WS_DIR="${AUTORACE_WS:-${REPO_DIR}/ros2_humble_ws}"
 DOMAIN_ID="${ROS_DOMAIN_ID:-70}"
 
 usage() {

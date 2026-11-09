@@ -7,7 +7,7 @@
   "workspaceFolder": "/root/ros2_humble_ws/src/turtlebot3_autorace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/root/ros2_humble_ws/src/turtlebot3_autorace,type=bind",
   "mounts": [
-    "source=${localWorkspaceFolder}/../ros2_humble_ws,target=/root/ros2_humble_ws,type=bind",
+    "source=${localWorkspaceFolder}/ros2_humble_ws,target=/root/ros2_humble_ws,type=bind",
     "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
   ],
   "containerEnv": {
