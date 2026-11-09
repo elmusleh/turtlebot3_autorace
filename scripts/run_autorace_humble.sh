@@ -15,7 +15,7 @@ chmod 600 "$XAUTH_FILE"
 if command -v xauth >/dev/null 2>&1 && [ -n "${DISPLAY:-}" ]; then
     xauth nlist "${DISPLAY}" 2>/dev/null | sed -e 's/^..../ffff/' | xauth -f "$XAUTH_FILE" nmerge - 2>/dev/null || true
 fi
-xhost +SI:localuser:"$(id -un)" >/dev/null 2>&1 || true
+xhost +SI:localuser:root >/dev/null 2>&1 || xhost +local:root >/dev/null 2>&1 || true
 
 # Clean up any leftover containers
 docker ps -q --filter "ancestor=autorace:humble" | xargs -r docker rm -f 2>/dev/null || true
@@ -30,13 +30,16 @@ echo "   4. Slow Sign Reading (3.0s pause + Yellow Box Overlay)"
 echo "   5. Dynamic LiDAR Slalom + Mission (${COURSE_MODE}) + MP4 Recorder"
 echo "=========================================================="
 
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+
 docker run -it --rm \
-  --user "$(id -u):$(id -g)" \
+  --user 0:0 \
   --entrypoint /bin/bash \
   --net=host \
   --ipc=host \
   --privileged \
-  -e HOME=/home/ros \
+  -e HOME=/root \
   -e DISPLAY="${DISPLAY:-:0}" \
   -e XAUTHORITY="$XAUTH_FILE" \
   -e QT_X11_NO_MITSHM=1 \
@@ -48,4 +51,4 @@ docker run -it --rm \
   -v "${REPO_DIR}:/root/ros2_humble_ws" \
   -w /root/ros2_humble_ws \
   autorace:humble \
-  -c "COURSE_MODE=${COURSE_MODE} bash /root/ros2_humble_ws/run_tb3_race_tmux.sh"
+  -c "trap 'chown -R ${HOST_UID}:${HOST_GID} /root/ros2_humble_ws 2>/dev/null || true' EXIT; COURSE_MODE=${COURSE_MODE} bash /root/ros2_humble_ws/run_tb3_race_tmux.sh"

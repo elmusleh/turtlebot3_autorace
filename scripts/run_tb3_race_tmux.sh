@@ -91,15 +91,17 @@ tmux send-keys -t "$CTL_HZ" "$SRC; sleep 42; echo '=== LIVE /cmd_vel RATE ==='; 
 tmux select-layout -t "$CTL" tiled
 
 # ---- window 4: GUI views ---------------------------------------------
+# Wait until camera (24s), detect_lane (30s), and detect_sign (36s) are publishing
+# so rqt_image_view automatically selects and displays the topics without prompting!
 if [ "$HEADLESS" != "1" ]; then
     VW=$(tmux new-window -t "$SESSION" -n views -P -F "#{pane_id}")
-    tmux send-keys -t "$VW" "$SRC; echo '=== RQT: camera (compensated) ==='; ros2 run rqt_image_view rqt_image_view /camera/image_compensated" C-m
+    tmux send-keys -t "$VW" "$SRC; sleep 26; echo '=== RQT: camera (compensated) ==='; ros2 run rqt_image_view rqt_image_view /camera/image_compensated" C-m
     VW_RV=$(tmux split-window -h -t "$VW" -P -F "#{pane_id}")
-    tmux send-keys -t "$VW_RV" "$SRC; echo '=== RVIZ2 ==='; rviz2 -d $WS/install/turtlebot3_gazebo/share/turtlebot3_gazebo/rviz/tb3_gazebo.rviz" C-m
+    tmux send-keys -t "$VW_RV" "$SRC; sleep 10; echo '=== RVIZ2 ==='; rviz2 -d $WS/install/turtlebot3_gazebo/share/turtlebot3_gazebo/rviz/tb3_gazebo.rviz" C-m
     VW_LT=$(tmux split-window -v -t "$VW_RV" -P -F "#{pane_id}")
-    tmux send-keys -t "$VW_LT" "$SRC; echo '=== RQT: lane detection (annotated) ==='; ros2 run rqt_image_view rqt_image_view /detect/image_lane" C-m
+    tmux send-keys -t "$VW_LT" "$SRC; sleep 34; echo '=== RQT: lane detection (annotated) ==='; ros2 run rqt_image_view rqt_image_view /detect/image_lane" C-m
     VW_SG=$(tmux split-window -v -t "$VW" -P -F "#{pane_id}")
-    tmux send-keys -t "$VW_SG" "$SRC; echo '=== RQT: sign detection (annotated) ==='; ros2 run rqt_image_view rqt_image_view /detect/image_traffic_sign" C-m
+    tmux send-keys -t "$VW_SG" "$SRC; sleep 38; echo '=== RQT: sign detection (annotated) ==='; ros2 run rqt_image_view rqt_image_view /detect/image_traffic_sign" C-m
     tmux select-layout -t "$VW" tiled
 fi
 
